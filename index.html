@@ -550,7 +550,9 @@ const canvas=document.getElementById('renderCanvas');
 const engine=new BABYLON.Engine(canvas,true,{stencil:true});
 const scene=new BABYLON.Scene(engine);
 const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&Math.max(screen.width,screen.height)<1100);
-engine.setHardwareScalingLevel(1.0);
+// на телефоне рендерим в 2/3 разрешения: заметно дешевле по заполнению пикселей,
+// картинка остаётся чёткой на экранах с высокой плотностью пикселей
+engine.setHardwareScalingLevel(isMobile?1.5:1.0);
 let MIRROR_SIZE=isMobile?256:1024;
 scene.clearColor=new BABYLON.Color4(0.45,0.72,0.98,1);
 
