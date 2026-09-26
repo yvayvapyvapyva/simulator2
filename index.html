@@ -891,6 +891,13 @@ function adoptLoadedModel(newMeshes,label,flip,pitchFlip){
     if(h){h.forEach(n=>{n.computeWorldMatrix(true);wheelAncestors.add(n);shadowGen.addShadowCaster(n);wheelParts.push(n);});p.dispose();}
     else wheelParts.push(p);
   }catch(e){wheelParts.push(p);}});
+  // Тормозной диск и суппорт в моделях названы *_Rotor_* / *_Caliper_*,
+  // под фильтр колёс они не попадают и остались бы в кузове намертво.
+  // Собираем их отдельно и ниже привязываем к колесу по общему габариту.
+  const isBrakeName=n=>/rotor|disc|caliper/i.test(n);
+  const isCaliperName=n=>/caliper/i.test(n);
+  const brakeParts=parts.filter(p=>isBrakeName(p.name)&&!isWheelName(p.name));
+  brakeParts.forEach(p=>p.computeWorldMatrix(true));
   const clusters=new Map();
   const clusterAdd=(m)=>{try{
     const c=m.getBoundingInfo().boundingBox.centerWorld;
@@ -912,17 +919,28 @@ function adoptLoadedModel(newMeshes,label,flip,pitchFlip){
   }
   const merged=new Map();
   groups.forEach((g,i)=>{const r=find(i);if(!merged.has(r))merged.set(r,[]);merged.get(r).push(...g.ms);});
-  merged.forEach(ms=>{try{
+  merged.forEach(ms0=>{try{
     const mn=new BABYLON.Vector3(Infinity,Infinity,Infinity),mx=new BABYLON.Vector3(-Infinity,-Infinity,-Infinity);
-    ms.forEach(m=>{const b=m.getBoundingInfo().boundingBox;
+    ms0.forEach(m=>{const b=m.getBoundingInfo().boundingBox;
       mn.minimizeInPlace(b.minimumWorld);mx.maximizeInPlace(b.maximumWorld);});
     const cx=(mn.x+mx.x)/2,cy=(mn.y+mx.y)/2,cz=(mn.z+mx.z)/2;
+    // диск/суппорт берём, только если он целиком внутри габарита колеса:
+    // так отсекаются одноимённые меши кузова (например «Rotor» в бампере)
+    const mg=Math.max(mx.x-mn.x,mx.y-mn.y,mx.z-mn.z)*0.02;
+    const ms=ms0.slice();
+    for(let i=brakeParts.length-1;i>=0;i--){
+      const b=brakeParts[i].getBoundingInfo().boundingBox,lo=b.minimumWorld,hi=b.maximumWorld;
+      if(lo.x>=mn.x-mg&&hi.x<=mx.x+mg&&lo.y>=mn.y-mg&&hi.y<=mx.y+mg&&lo.z>=mn.z-mg&&hi.z<=mx.z+mg){
+        ms.push(brakeParts[i]);brakeParts.splice(i,1);
+      }
+    }
     const r=Math.max(0.15,(mx.y-mn.y)/2);
     let pivotParent=carRoot,off=new BABYLON.Vector3(cx,cy,cz);
     if(cz>0){const st=new BABYLON.TransformNode('steer',scene);st.parent=carRoot;st.position.set(cx,0,cz);
       steer.push(st);pivotParent=st;off=new BABYLON.Vector3(0,cy,0);}
     const sp=new BABYLON.TransformNode('spin',scene);sp.parent=pivotParent;sp.position.copyFrom(off);
-    ms.forEach(m=>m.setParent(sp,true));
+    // диск крутится вместе с колесом, суппорт — только поворачивается с ним
+    ms.forEach(m=>m.setParent(isCaliperName(m.name)?pivotParent:sp,true));
     spin.push({node:sp,radius:r||CAR.wheelR});
   }catch(e){}});
   disposeCurrentCar();
@@ -1009,11 +1027,16 @@ function mergeCarGeometry(){
   decalMeshes.forEach(add);
   [leftGlow,rightGlow,leftFGlow,rightFGlow,leftMirr,rightMirr,hiddenGlowMesh].forEach(add);
   let n=0;
-  // 1) колёса и руль: только прямые потомки пивота, иначе у переднего колеса
-  //    (spin внутри steer) слились бы все части в steer и колесо перестало бы крутиться
+  // 1) колёса и руль: только те части, что не лежат под другим пивотом,
+  //    иначе у переднего колеса (spin внутри steer) все детали слились бы
+  //    в steer и колесо перестало бы крутиться
   pivots.forEach((pv,i)=>{
     if(!pv||pv.isDisposed())return;
-    n+=mergeInto(pv.getChildMeshes(true),pv,'wheelPart'+i);
+    const own=pv.getChildMeshes(true).filter(m=>{
+      for(const other of pivots)if(other!==pv&&isUnderNode(m,other))return false;
+      return true;
+    });
+    n+=mergeInto(own,pv,'wheelPart'+i);
   });
   // 2) кузов: всё, что не под пивотом и не управляется из кода
   const body=car.getChildMeshes().filter(m=>{
