@@ -159,10 +159,22 @@ function resetMirrorAngles(){
   applyMirrorAngles();
 }
 
+// Центральное (салонное) зеркало: каждое зеркало — это отдельный
+// MirrorTexture, то есть лишний полный проход сцены за кадр. Боковые
+// оставляем, центральное отключено — минус один проход на кадр.
+const RENDER_REAR_MIRROR = false;
+
+function isRearMirrorName(n){
+  return n.includes('rear_mirror') || n.includes('interior_mirror') || n.includes('inside_mirror') ||
+         (n.includes('mirror') && !n.includes('door_mesh'));
+}
+
 function setupMirrorReflections(modelRoot){
   const mirrors = modelRoot.getChildMeshes().filter(m => {
     const n = m.name.toLowerCase();
-    return n.includes('mirror') && (n.includes('door_mesh') || n.includes('rear') || n.includes('interior') || n.includes('inside'));
+    if(!n.includes('mirror'))return false;
+    if(isRearMirrorName(n))return RENDER_REAR_MIRROR;
+    return n.includes('door_mesh');
   });
   
   if(!mirrors.length){
@@ -177,8 +189,7 @@ function setupMirrorReflections(modelRoot){
     
     const n = mesh.name.toLowerCase();
     let name, probeKey;
-    const isRear = n.includes('rear_mirror') || n.includes('interior_mirror') || 
-                   (n.includes('mirror') && !n.includes('door_mesh'));
+    const isRear = isRearMirrorName(n);
     
     if(isRear){
       name = 'rearMirror';
