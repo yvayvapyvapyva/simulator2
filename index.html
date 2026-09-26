@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Площадка 100×100 · модель с диска + конусы</title>
+<style>
+  html,body{margin:0;height:100%;background:#111;overflow:hidden}
+  #renderCanvas{width:100%;height:100%;display:block;outline:none;touch-action:none}
+  #gearBtn{position:fixed;left:14px;top:14px;z-index:17;width:44px;height:44px;
+    background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:10px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;padding:0;
+    -webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none}
+  #gearBtn svg{width:24px;height:24px;stroke:#9db4c4;stroke-width:1.7;fill:none;
+    stroke-linecap:round;stroke-linejoin:round;transition:stroke .15s}
+  #gearBtn:hover{border-color:#62d0df}
+  #gearBtn:hover svg{stroke:#62d0df}
+  #gearBtn:active{background:#62d0df}
+  #gearBtn:active svg{stroke:#1a1200}
+  #mapBtn{width:100%;padding:10px 0;background:#1c2c3a;color:#9db4c4;
+    border:1px solid #2a4257;border-radius:8px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    font:600 12px/1 'IBM Plex Sans',system-ui,sans-serif;
+    -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  #mapBtn svg{width:18px;height:18px;stroke:#9db4c4;stroke-width:1.7;fill:none;
+    stroke-linecap:round;stroke-linejoin:round;transition:stroke .15s}
+  #mapBtn:hover{border-color:#ff6d00;color:#ff6d00}
+  #mapBtn:hover svg{stroke:#ff6d00}
+  #mapBtn:active{background:#ff6d00;color:#1a1200}
+  #mapBtn:active svg{stroke:#1a1200}
+  #settingsBackdrop,#decalBackdrop,#mapBackdrop,#typeBackdrop{position:fixed;inset:0;z-index:18;background:rgba(0,0,0,.5);
+    display:none;backdrop-filter:blur(2px)}
+  #settingsBackdrop.open,#decalBackdrop.open,#mapBackdrop.open,#typeBackdrop.open{display:block}
+  #decalBackdrop{background:transparent;backdrop-filter:none;pointer-events:none}
+  #settingsWin,#decalWin,#mapWin,#typeWin{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:19;
+    width:min(390px,94vw);max-height:86vh;overflow-y:auto;display:none;
+    background:rgba(12,22,32,.97);border:1px solid #2a4257;border-radius:12px;
+    font:13px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#d8e5ee;
+    box-shadow:0 18px 50px rgba(0,0,0,.6);-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  #settingsWin.open,#decalWin.open,#mapWin.open,#typeWin.open{display:block}
+  #decalWin{left:max(14px,env(safe-area-inset-left,0px));right:auto;top:50%;transform:translateY(-50%)}
+  #settingsWin::-webkit-scrollbar,#decalWin::-webkit-scrollbar,#mapWin::-webkit-scrollbar,#typeWin::-webkit-scrollbar{width:6px}
+  #settingsWin::-webkit-scrollbar-thumb,#decalWin::-webkit-scrollbar-thumb,#mapWin::-webkit-scrollbar-thumb,#typeWin::-webkit-scrollbar-thumb{background:#2a4257;border-radius:3px}
+  body.edit-mode #gearBtn{display:none}
+  body.edit-mode #driveCtrl{display:none}
+  .me-top-hint{position:fixed;top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);
+    z-index:9;display:none;max-width:calc(100vw - 24px);text-align:center;white-space:normal;
+    background:rgba(12,22,32,.88);border:1px solid #2a4257;border-radius:10px;
+    padding:6px 12px;font:12px/1.4 'IBM Plex Sans',system-ui,sans-serif;color:#d8e5ee;
+    box-shadow:0 6px 18px rgba(0,0,0,.4)}
+  body.edit-mode .me-top-hint{display:block}
+  #mapEdit{position:fixed;left:max(14px,env(safe-area-inset-left,0px));bottom:14px;z-index:8;display:none;
+    width:max-content;max-width:calc(100vw - 28px);
+    background:rgba(12,22,32,.9);border:1px solid #2a4257;border-radius:14px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);padding:10px 12px;
+    font:13px/1.5 'IBM Plex Sans',system-ui,sans-serif;color:#d8e5ee}
+  #mapEdit.open{display:flex;align-items:center;gap:14px}
+  .me-joy{flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .mj-base{position:relative;width:104px;height:104px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#22313f,#0c1620 72%);
+    border:1px solid #2a4257;box-shadow:0 4px 14px rgba(0,0,0,.45),inset 0 0 0 5px rgba(12,22,32,.55);
+    touch-action:none;cursor:grab;-webkit-tap-highlight-color:transparent;box-sizing:border-box}
+  .mj-base.on{border-color:#ff6d00}
+  .mj-knob{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:0;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#2a4257,#16304a 70%);
+    border:2px solid #ff6d00;box-shadow:0 3px 8px rgba(0,0,0,.5);
+    transform:translate(-50%,-50%);pointer-events:none}
+  .me-main{flex:1 1 auto;min-width:0}
+  @media (max-width:640px),(pointer:coarse){
+    .mj-base{width:112px;height:112px}
+    .mj-knob{width:48px;height:48px}
+  }
+  .me-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .me-title{font-weight:600;font-size:13px;color:#ff6d00;letter-spacing:.4px}
+  .me-done{background:#1c2c3a;color:#9db4c4;border:1px solid #2a4257;border-radius:8px;
+    font:600 12px/1 inherit;padding:8px 16px;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  .me-done:hover{border-color:#62d0df;color:#62d0df}
+  #mapDone.me-done{width:34px;height:34px;padding:0;border-radius:9px;font-size:15px;line-height:1;flex:0 0 auto}
+  .me-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;justify-content:flex-end}
+  .me-count{color:#7c93a4;font-size:12px;white-space:normal;line-height:1.5;margin-right:auto}
+  .me-count b{color:#ff6d00}
+  .me-clear{background:#1c2c3a;color:#9db4c4;border:1px solid #2a4257;border-radius:8px;
+    font:600 12px/1 inherit;padding:8px 14px;cursor:pointer;white-space:nowrap;
+    -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  .me-clear:hover{border-color:#e05e4a;color:#e05e4a}
+  #clear.me-clear{width:auto;padding:8px 14px}
+  .me-modes button{flex:1;min-height:44px;padding:8px 4px;background:#1c2c3a;color:#9db4c4;
+    border:1px solid #2a4257;border-radius:10px;font:600 13px/1 inherit;cursor:pointer;transition:.15s;
+    -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  .me-modes button:hover{border-color:#ff6d00;color:#ff6d00}
+  .me-hint{color:#7c93a4;font-size:12px;min-height:18px;margin-top:8px;max-width:280px;white-space:normal}
+  .me-terr{display:flex;align-items:center;gap:8px;margin-bottom:8px;justify-content:flex-end}
+  .me-terr-label{color:#7c93a4;font-size:12px;white-space:nowrap;margin-right:auto}
+  .me-terr input{width:64px;min-height:36px;box-sizing:border-box;background:#1c2c3a;border:1px solid #2a4257;border-radius:8px;
+    color:#9db4c4;font:600 13px/1 inherit;text-align:center;padding:4px;-webkit-appearance:none;-moz-appearance:textfield}
+  .me-terr input::-webkit-outer-spin-button,.me-terr input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .me-terr .x{color:#7c93a4}
+  .sw-head{display:flex;align-items:center;justify-content:space-between;
+    padding:12px 16px;border-bottom:1px solid #2a4257;position:sticky;top:0;z-index:1;
+    background:rgba(12,22,32,.95);backdrop-filter:blur(4px)}
+  .sw-title{font-weight:600;font-size:14px;letter-spacing:.3px}
+  .sw-close{width:32px;height:32px;background:#1c2c3a;border:1px solid #2a4257;border-radius:8px;
+    color:#9db4c4;font:600 15px/1 inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .sw-close:hover{border-color:#e05e4a;color:#e05e4a}
+  .sw-close.active{border-color:#62d0df;color:#62d0df}
+  .sw-body{padding:14px 16px 18px}
+  .sw-sec{margin-top:14px;padding-top:12px;border-top:1px solid #223643}
+  .sw-sec:first-child{margin-top:0;padding-top:0;border-top:none}
+  .sw-sec h3{margin:0 0 9px;font-size:11px;font-weight:600;color:#62d0df;letter-spacing:.6px;text-transform:uppercase}
+  .modes{display:flex;gap:6px;margin-bottom:10px}
+  .me-modes{flex-direction:column;align-items:stretch;width:92px;margin:0}
+  .me-modes button{width:100%}
+  .modes button{flex:1;padding:7px 4px;background:#1c2c3a;color:#9db4c4;
+    border:1px solid #2a4257;border-radius:8px;font:600 11px/1.2 inherit;cursor:pointer;transition:.15s}
+  .modes button:hover{border-color:#ff6d00;color:#ff6d00}
+  .modes button.active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
+  .modes.draw button[data-mode="move"]{opacity:.35;pointer-events:none}
+  .me-body{display:flex;gap:10px;align-items:flex-start}
+  .me-type{margin:0;width:auto;position:relative;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .me-type-name{color:#7c93a4;font-size:11px;line-height:1;white-space:nowrap}
+  .me-type-native{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0;margin:0}
+  .t-ico{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .t-ico svg{width:100%;height:100%;display:block}
+  .t-ico img{width:100%;height:100%;object-fit:contain;display:block;border-radius:6px;background:rgba(12,22,32,.85)}
+  .t-caret{color:#7c93a4;font-size:11px;line-height:1}
+  .me-type-thumb{width:auto;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px;
+    background:rgba(12,22,32,.95);color:#d8e5ee;border:1px solid #2a4257;border-radius:10px;
+    padding:6px 8px;font:600 13px/1 'IBM Plex Sans',system-ui,sans-serif;cursor:pointer;
+    -webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  .me-type-thumb:hover{border-color:#ff6d00}
+  .me-type-thumb .t-ico{width:108px;height:108px}
+  .me-type-thumb .t-ico img{width:100%;height:100%;object-fit:contain;border-radius:8px}
+  .me-type-thumb .tv-wrap{position:relative;width:108px;height:108px;display:inline-flex;align-items:center;justify-content:center;overflow:hidden;border-radius:8px}
+  .me-type.disabled .me-type-thumb{opacity:.45;pointer-events:none}
+  .tg-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .tg-card{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 8px;background:#1c2c3a;
+    border:1px solid #2a4257;border-radius:12px;cursor:pointer;color:#d8e5ee;font:600 13px/1 'IBM Plex Sans',system-ui,sans-serif;
+    -webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  .tg-card:hover{border-color:#ff6d00}
+  .tg-card .t-ico{width:100%;height:96px}
+  .tg-card .t-ico img{width:100%;height:100%;object-fit:contain;border-radius:8px}
+  .tg-card .t-ico svg{width:100%;height:100%}
+  .tg-card .tg-lbl{margin-top:2px}
+  .tv-wrap{position:relative;width:100%;height:96px;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+  .tg-fallback{width:100%;height:100%}
+  .tg-fallback img{width:100%;height:100%;object-fit:contain;border-radius:8px}
+  .cone-toggle{font-size:12px;color:#9db4c4;margin-bottom:8px;user-select:none;cursor:pointer}
+  .cone-toggle input{accent-color:#ff6d00;cursor:pointer}
+  .modes.disabled{opacity:.4;pointer-events:none}
+  .count{margin-bottom:6px}.count b{color:#ff6d00}
+  #hintline{color:#7c93a4;font-size:12px;margin-bottom:4px;min-height:18px}
+  .drive{color:#7c93a4;font-size:11px;margin-bottom:6px}
+  .drive b{color:#9db4c4}
+  .tele{color:#9db4c4;font-size:12px;margin-bottom:10px}
+  .tele b{color:#62d0df}
+  #clear,#cabBtn,#camFollowBtn{width:100%;padding:6px 0;background:#1c2c3a;color:#9db4c4;
+    border:1px solid #2a4257;border-radius:8px;font:600 11px/1 inherit;cursor:pointer}
+  #cabBtn,#camFollowBtn{margin-top:6px}
+  #clear:hover{border-color:#e05e4a;color:#e05e4a}
+  #cabBtn:hover,#cabBtn.active,#camFollowBtn:hover,#camFollowBtn.active{border-color:#62d0df;color:#62d0df}
+  .mirror-ctrl{margin-top:2px}
+  .mirror-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px}
+  .mirror-row label{width:50px;color:#7c93a4}
+  .mirror-row .val{width:32px;text-align:right;color:#ff6d00;font-variant-numeric:tabular-nums}
+  .mirror-row input[type=range]{flex:1;height:14px;accent-color:#62d0df;background:transparent;cursor:pointer}
+  .mirror-row input[type=range]::-webkit-slider-thumb{width:12px;height:12px}
+  #resetMirrors{width:100%;padding:5px 0;margin-top:4px;background:#1c2c3a;color:#9db4c4;
+    border:1px solid #2a4257;border-radius:8px;font:600 11px/1 inherit;cursor:pointer}
+  #resetMirrors:hover{border-color:#62d0df;color:#62d0df}
+  .mirror-keys{color:#7c93a4;font-size:10px;margin-top:4px;line-height:1.4}
+  .mirror-keys b{color:#9db4c4}
+  @media (max-width:640px),(pointer:coarse){
+    #gearBtn{left:calc(14px + env(safe-area-inset-left,0px));top:auto;bottom:calc(min(30vw,500px,50vh - 30px) + 34px + env(safe-area-inset-bottom,0px));width:52px;height:52px;border-radius:14px}
+    #gearBtn svg{width:26px;height:26px}
+    #mapBtn{min-height:44px;font-size:13px;border-radius:10px}
+    #mapBtn svg{width:18px;height:18px}
+    #settingsWin,#decalWin,#mapWin,#typeWin{width:min(94vw,500px);max-height:calc(100vh - 40px);font:14px/1.5 system-ui,sans-serif;border-radius:14px}
+    .sw-head{padding:14px 16px}
+    .sw-title{font-size:15px}
+    .sw-close{width:36px;height:36px;font-size:16px}
+    .sw-body{padding:15px 16px}
+    .sw-sec h3{font-size:11.5px;margin-bottom:10px}
+    #clear,#cabBtn,#camFollowBtn,#resetMirrors,.modes button,#mapWin .me-clear{min-height:44px;font-size:13px;padding:10px 8px}
+    .modes{gap:8px}
+    #mapEdit{font-size:14px;padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px))}
+    #mapEdit .me-modes button{min-height:48px;font-size:14px}
+    #mapEdit .me-done,#mapEdit .me-clear{min-height:44px;font-size:13px;padding:8px 16px}
+    #mapEdit .me-hint{font-size:13.5px}
+    .mirror-row{margin-bottom:10px}
+    .mirror-row input[type=range]{min-height:30px;touch-action:auto}
+    .mirror-row label{width:66px;font-size:12.5px}
+    .mirror-row .val{width:42px;font-size:12.5px}
+    .mirror-keys,.drive,.tele,.count,#hintline{font-size:13px}
+    .cone-toggle{font-size:13.5px;padding:4px 0;margin-bottom:10px}
+    .cone-toggle input{width:18px;height:18px}
+  }
+</style>
+<style id="drivePanelStyle">
+/* Стили нижней панели управления вынесены сюда (модуль drive-control.js). */
+#driveCtrl{position:fixed;left:0;right:0;bottom:0;z-index:8;display:none;align-items:flex-end;
+    justify-content:space-between;pointer-events:none;padding:0}
+  .dv-btns{display:flex;flex-direction:column;gap:8px;pointer-events:auto;box-sizing:border-box;
+    width:25%;height:auto;align-items:flex-start;padding:0 0 8px 16px}
+  .dv-row{display:flex;gap:8px;pointer-events:auto}
+  .dv-btn{width:calc((min(30vw,500px,50vh - 30px) - 8px)/2);aspect-ratio:1;font-size:clamp(20px,7vw,40px);
+    color:#d8e5ee;background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:14px;cursor:pointer;
+    touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    display:flex;align-items:center;justify-content:center}
+  .dv-btn.on,.dv-btn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
+  .dv-btn.active{background:#62d0df;color:#1a1200;border-color:#62d0df}
+  .dv-wheelzone{position:relative;display:flex;align-items:flex-start;gap:min(4vw,40px);pointer-events:none;margin-right:2vw;height:auto}
+  .dv-blink{pointer-events:auto;width:max(40px,calc((min(30vw,500px,50vh - 30px) - 8px)*0.32));aspect-ratio:1;
+    font-size:clamp(16px,6vw,34px);color:#fff;background:rgba(12,22,32,.85);border:1px solid #2a4257;
+    border-radius:50%;cursor:pointer;user-select:none;-webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;touch-action:none}
+  .dv-blink.active{background:#ffd60a;color:#1a1200;border-color:#ffd60a}
+  .dv-rightcol{display:flex;flex-direction:column;gap:8px;pointer-events:none;margin-top:0}
+  .dv-zoombtn{pointer-events:auto;width:max(40px,calc((min(30vw,500px,50vh - 30px) - 8px)*0.32));
+    aspect-ratio:1;font-size:26px;line-height:1;color:#fff;
+    background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:10px;cursor:pointer;
+    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+    display:flex;align-items:center;justify-content:center;touch-action:none}
+  .dv-zoombtn:active{background:#ff6d00;color:#1a1200;border-color:#ff6d00}
+  #driveCtrl,#driveCtrl *{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  #gearBtn,#mapBtn,#settingsWin button,#mapEdit button{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+  .dv-wheelwrap{position:relative;width:min(30vw,500px,calc(50vh - 30px));display:flex;flex-direction:column;
+    align-items:flex-end;justify-content:flex-end;pointer-events:none;box-sizing:border-box;padding:0}
+  .dv-wheel{position:relative;border-radius:50%;pointer-events:auto;touch-action:none;cursor:grab;
+    -webkit-tap-highlight-color:transparent;box-sizing:border-box;
+    background:radial-gradient(circle at 35% 30%,#22313f,#0c1620 72%);
+    border:7px solid #2a4257;box-shadow:0 0 0 4px rgba(12,22,32,.6),0 6px 18px rgba(0,0,0,.5);
+    width:min(100%,500px,calc(50vh - 30px));aspect-ratio:1;margin-bottom:12px}
+  .dv-rot{position:absolute;inset:0;transition:transform .06s linear}
+  .dv-knob{position:absolute;top:-4%;left:50%;transform:translateX(-50%);width:22%;aspect-ratio:1;
+    border-radius:50%;background:#ff6d00;border:2px solid #1a1200;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+  .dv-hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22%;aspect-ratio:1;
+    border-radius:50%;background:#1c2c3a;border:2px solid #2a4257}
+  .dv-ind{position:relative;width:min(100%,500px,calc(50vh - 30px));height:8px;
+    background:rgba(12,22,32,.85);border:1px solid #2a4257;border-radius:4px;overflow:hidden;
+    pointer-events:none;margin:0 0 8px 0;flex:0 0 auto}
+  .dv-ind-marker{position:absolute;top:-1px;width:3px;height:10px;left:50%;transform:translateX(-50%);
+    background:#ff6d00;border-radius:2px}
+  @media (pointer:fine){
+    #driveCtrl{display:flex;left:14px;right:auto;bottom:14px;width:auto;max-width:520px;
+      justify-content:flex-end;gap:10px;padding:8px;
+      background:rgba(12,22,32,.9);border:1px solid #2a4257;border-radius:14px;
+      box-shadow:0 8px 24px rgba(0,0,0,.45);align-items:center}
+    #gearBtn{left:14px;top:auto;bottom:174px}
+    .dv-btns{width:auto;padding:0;align-items:flex-start;flex-direction:column}
+    .dv-row{gap:6px}
+    .dv-btn{width:42px;font-size:18px;border-radius:10px}
+    .dv-wheelzone{gap:8px;margin-right:0;align-items:flex-start}
+    .dv-wheelwrap{width:auto;align-items:center;justify-content:center;margin-right:0}
+    .dv-wheel{width:110px;height:110px;border-width:5px;box-shadow:0 0 0 3px rgba(12,22,32,.6),0 6px 18px rgba(0,0,0,.5);margin-bottom:0}
+    .dv-ind{width:110px;margin:0 0 6px 0}
+    .dv-blink,.dv-zoombtn{width:40px;height:40px;font-size:15px}
+    .dv-rightcol{gap:6px}
+  }
+  @media (pointer:coarse){
+    #driveCtrl{display:flex}
+    #settingsWin,#decalWin,#mapWin,#typeWin{max-height:calc(100vh - 140px)}
+  }
+</style>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script>
+function resizeEngine(){
+  try{
+    if(typeof engine==='undefined'||!engine||!engine.resize)return;
+    engine.resize();
+    requestAnimationFrame(()=>{if(engine&&engine.resize)engine.resize();});
+  }catch(e){}
+}
+function tgFullscreen(){
+  try{
+    if(!window.Telegram||!Telegram.WebApp)return;
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+    if(Telegram.WebApp.setHeaderColor)Telegram.WebApp.setHeaderColor('#111213');
+    if(Telegram.WebApp.setBackgroundColor)Telegram.WebApp.setBackgroundColor('#111213');
+    if(Telegram.WebApp.disableVerticalSwipes)Telegram.WebApp.disableVerticalSwipes();
+    if(Telegram.WebApp.requestFullscreen)Telegram.WebApp.requestFullscreen();
+    resizeEngine();
+  }catch(e){}
+  requestAnimationFrame(resizeEngine);
+}
+window.addEventListener('resize',resizeEngine);
+document.addEventListener('fullscreenchange',resizeEngine);
+if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.onEvent)Telegram.WebApp.onEvent('viewportChanged',resizeEngine);
+tgFullscreen();
+document.addEventListener('DOMContentLoaded',tgFullscreen);
+window.addEventListener('load',tgFullscreen);
+document.addEventListener('pointerdown',tgFullscreen,{once:true});
+</script>
+</head>
+<body>
+
+<canvas id="renderCanvas"></canvas>
+
+<div class="me-top-hint" id="hintline">Клик по площадке — поставить конус (шаг 0,25 м)</div>
+
+<div id="mapEdit">
+  <div class="me-joy">
+    <div class="mj-base" id="joyBase" aria-label="Перемещение по карте">
+      <div class="mj-knob" id="joyKnob"></div>
+    </div>
+  </div>
+  <div class="me-main">
+  <div class="me-head">
+    <button class="me-clear" id="mapCfgBtn">Карта</button>
+    <button class="me-done" id="mapDone" aria-label="Выйти из режима редактирования">✕</button>
+  </div>
+  <div class="me-row">
+    <button class="me-clear" id="finishLineBtn" style="display:none">Завершить линию</button>
+  </div>
+  <div class="me-body">
+  <div class="me-type" id="editType">
+    <select id="editTypeSel" class="me-type-native" tabindex="-1" aria-hidden="true">
+      <option value="cones" selected>Конусы</option>
+      <option value="lines">Разметка</option>
+      <option value="curb">Бордюр</option>
+      <option value="fence">Забор</option>
+      <option value="estacada">Эстакада</option>
+    </select>
+    <button class="me-type-thumb" id="editTypeBtn" aria-label="Выбрать объект">
+      <span class="tv-wrap me-type-wrap">
+        <span class="t-ico" id="typeIco"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6 15.8 21H8.2Z" fill="#ff8c3b" stroke="#1a1200" stroke-width="1.1" stroke-linejoin="round"/><ellipse cx="12" cy="14.4" rx="2.4" ry="1.1" fill="#fff" stroke="#1a1200" stroke-width=".8"/></svg></span>
+      </span>
+      <span class="t-caret">▾</span>
+    </button>
+    <div class="me-type-name" id="typeName">Конус</div>
+  </div>
+  <div class="modes me-modes" id="editModes">
+    <button data-mode="place" class="active">Поставить</button>
+    <button data-mode="move">Переместить</button>
+    <button data-mode="delete">Удалить</button>
+  </div>
+  </div>
+  </div>
+</div>
+
+<button id="gearBtn" aria-label="Настройки">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1"/>
+  </svg>
+</button>
+
+<div id="settingsBackdrop"></div>
+<div id="decalBackdrop"></div>
+<div id="decalWin">
+  <div class="sw-head">
+    <span class="sw-title">Декали</span>
+    <span style="flex:1"></span>
+    <button class="sw-close" id="decalShowAll" aria-label="Показать все" title="Показать все">☑</button>
+    <button class="sw-close" id="decalHideAll" aria-label="Скрыть все" title="Скрыть все">☐</button>
+    <button class="sw-close" id="decalClose" aria-label="Закрыть" style="margin-left:8px">✕</button>
+  </div>
+  <div class="sw-body">
+    <div class="drive"><b>☑</b> — показать все, <b>☐</b> — скрыть все</div>
+    <div id="decalList"></div>
+  </div>
+</div>
+<div id="settingsWin">
+  <div class="sw-head">
+    <span class="sw-title">Настройки</span>
+    <button class="sw-close" id="settingsClose" aria-label="Закрыть">✕</button>
+  </div>
+  <div class="sw-body">
+
+    <div class="sw-sec">
+      <h3>Карта</h3>
+      <button id="mapBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+          <line x1="8" y1="2" x2="8" y2="18"/>
+          <line x1="16" y1="6" x2="16" y2="22"/>
+        </svg>
+        Редактировать карту
+      </button>
+    </div>
+
+    <div class="sw-sec">
+      <h3>Декали</h3>
+      <button id="decalBtn" style="width:100%;padding:10px 0;background:#1c2c3a;color:#9db4c4;border:1px solid #2a4257;border-radius:8px;cursor:pointer;font:600 12px/1 'IBM Plex Sans',system-ui,sans-serif">Настроить декали</button>
+      <div class="mirror-keys" style="margin-top:6px">Показать или скрыть каждый белый шильдик отдельно</div>
+    </div>
+
+    <div class="sw-sec">
+      <h3>Управление</h3>
+      <div class="drive">Езда: <b>W/A/S/D</b> или стрелки · <b>Space</b> — тормоз · <b>Q/E</b> — поворотник</div>
+      <div class="tele">Скорость: <b id="spd">0</b> км/ч · Руль: <b id="str">0°</b></div>
+      <div class="tele" id="blinkdbg">Q/E: поворотники (инициализация…)</div>
+      <button id="cabBtn">Обзор: кабина (V)</button>
+      <button id="camFollowBtn">Автоповорот камеры: вкл (F)</button>
+    </div>
+
+    <div class="sw-sec">
+      <h3>Угол обзора из кабины</h3>
+      <div class="mirror-ctrl">
+        <div class="mirror-row">
+          <label>FOV</label>
+          <input type="range" id="cabFov" min="40" max="120" value="77" step="1">
+          <span class="val" id="cabFovV">77°</span>
+        </div>
+        <div class="mirror-keys">Ширина поля зрения водителя (горизонтальный угол)</div>
+      </div>
+    </div>
+
+    <div class="sw-sec">
+      <h3>Зеркала заднего вида</h3>
+      <div class="mirror-ctrl">
+        <div class="mirror-row">
+          <label>Лев. Г</label>
+          <input type="range" id="leftH" min="-45" max="45" value="0" step="1">
+          <span class="val" id="leftHV">0°</span>
+        </div>
+        <div class="mirror-row">
+          <label>Лев. В</label>
+          <input type="range" id="leftV" min="-25" max="25" value="0" step="1">
+          <span class="val" id="leftVV">0°</span>
+        </div>
+        <div class="mirror-row">
+          <label>Прав. Г</label>
+          <input type="range" id="rightH" min="-45" max="45" value="0" step="1">
+          <span class="val" id="rightHV">0°</span>
+        </div>
+        <div class="mirror-row">
+          <label>Прав. В</label>
+          <input type="range" id="rightV" min="-25" max="25" value="0" step="1">
+          <span class="val" id="rightVV">0°</span>
+        </div>
+        <button id="resetMirrors">Сброс зеркал (R)</button>
+        <div class="mirror-keys">
+          Клавиши: <b>[/]</b> левое, <b>;/</b> правое · <b>'</b> сброс
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="driveCtrl">
+  <div class="dv-btns">
+    <button class="dv-btn" id="dvFwd" aria-label="Вперёд">▲</button>
+    <div class="dv-row">
+      <button class="dv-btn" id="dvBack" aria-label="Назад">▼</button>
+      <button class="dv-btn dv-view" id="dvView" aria-label="Переключить вид">🪑</button>
+    </div>
+  </div>
+  <div class="dv-wheelzone">
+    <button class="dv-blink" id="dvBlinkL" aria-label="Левый поворотник">◀</button>
+    <div class="dv-wheelwrap">
+      <div class="dv-ind"><div class="dv-ind-marker" id="dvIndMarker"></div></div>
+      <div class="dv-wheel" id="dvWheel">
+        <div class="dv-rot" id="dvRot">
+          <div class="dv-hub"></div>
+          <div class="dv-knob" id="dvKnob"></div>
+        </div>
+      </div>
+    </div>
+    <div class="dv-rightcol">
+      <button class="dv-blink" id="dvBlinkR" aria-label="Правый поворотник">▶</button>
+      <button class="dv-zoombtn" id="dvZoomIn" aria-label="Приблизить">+</button>
+      <button class="dv-zoombtn" id="dvZoomOut" aria-label="Отдалить">−</button>
+    </div>
+  </div>
+</div>
+
+<div id="mapBackdrop"></div>
+<div id="mapWin">
+  <div class="sw-head">
+    <span class="sw-title">Настройки карты</span>
+    <button class="sw-close" id="mapCfgClose" aria-label="Закрыть">✕</button>
+  </div>
+  <div class="sw-body">
+    <div class="me-count" style="margin-bottom:10px">Конусов: <b id="count">0</b> · Линий: <b id="countLines">0</b> · Бордюров: <b id="countCurb">0</b> · Заборов: <b id="countFence">0</b> · Эстакад: <b id="countEstacada">0</b></div>
+    <div class="me-terr">
+      <span class="me-terr-label">Размер территории (Ш × Д), м</span>
+      <input type="number" id="terrW" min="10" max="400" step="5" value="100">
+      <span class="x">×</span>
+      <input type="number" id="terrD" min="10" max="400" step="5" value="100">
+    </div>
+    <div class="mirror-keys" style="margin-top:6px">Ширина и длина огороженной площадки. Изменение пересоздаёт землю и забор.</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="me-clear" id="applyTerr" style="flex:1">Применить новый размер</button>
+    </div>
+    <div class="sw-sec">
+      <h3>Файл карты</h3>
+      <div style="display:flex;gap:8px">
+        <button class="me-clear" id="mapSaveBtn" style="flex:1">Сохранить карту</button>
+        <button class="me-clear" id="mapLoadBtn" style="flex:1">Загрузить карту</button>
+      </div>
+      <input type="file" id="mapFileInput" accept="application/json,.json" style="display:none">
+      <div class="mirror-keys" style="margin-top:6px">Выгружает конусы, разметку, бордюры, заборы, эстакады и размер площадки в JSON-файл</div>
+      <div class="mirror-keys" id="mapFileStatus" style="margin-top:6px"></div>
+    </div>
+    <div class="sw-sec">
+      <button class="me-clear" id="mapClearAll" style="width:100%;padding:10px 0;border-color:#5a2a2a;color:#e08a6a">Очистить карту</button>
+      <div class="mirror-keys" style="margin-top:6px">Удалить все конусы, разметку, бордюры и заборы</div>
+    </div>
+  </div>
+</div>
+
+<div id="typeBackdrop"></div>
+<div id="typeWin">
+  <div class="sw-head">
+    <span class="sw-title">Объекты</span>
+    <button class="sw-close" id="typeClose" aria-label="Закрыть">✕</button>
+  </div>
+  <div class="sw-body tg-grid">
+    <button class="tg-card" data-type="cones">
+      <div class="tv-wrap">
+        <span class="t-ico tg-fallback"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6 15.8 21H8.2Z" fill="#ff8c3b" stroke="#1a1200" stroke-width="1.1" stroke-linejoin="round"/><ellipse cx="12" cy="14.4" rx="2.4" ry="1.1" fill="#fff" stroke="#1a1200" stroke-width=".8"/></svg></span>
+      </div>
+      <span class="tg-lbl">Конус</span>
+    </button>
+    <button class="tg-card" data-type="lines">
+      <div class="tv-wrap">
+        <span class="t-ico tg-fallback"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/><rect x="10" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/><rect x="17" y="10.3" width="4" height="1.7" rx=".85" fill="#fff"/></svg></span>
+      </div>
+      <span class="tg-lbl">Разметка</span>
+    </button>
+    <button class="tg-card" data-type="curb">
+      <div class="tv-wrap">
+        <span class="t-ico tg-fallback"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="8.6" width="19" height="5.6" rx="1.2" fill="#fff" stroke="#22303a" stroke-width="1"/><rect x="2.5" y="14.2" width="19" height="1.8" rx=".9" fill="#e8eaed" stroke="#22303a" stroke-width=".8"/></svg></span>
+      </div>
+      <span class="tg-lbl">Бордюр</span>
+    </button>
+    <button class="tg-card" data-type="fence">
+      <div class="tv-wrap">
+        <span class="t-ico tg-fallback"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="14" y="5" width="2" height="16" rx=".6" fill="#6a7075" stroke="#22303a" stroke-width=".8"/><rect x="18.5" y="5" width="2" height="16" rx=".6" fill="#6a7075" stroke="#22303a" stroke-width=".8"/><rect x="3" y="7" width="17.4" height="1.8" rx=".9" fill="#f2f4f6" stroke="#22303a" stroke-width=".7"/><rect x="3" y="14" width="17.4" height="1.8" rx=".9" fill="#f2f4f6" stroke="#22303a" stroke-width=".7"/></svg></span>
+      </div>
+      <span class="tg-lbl">Забор</span>
+    </button>
+    <button class="tg-card" data-type="estacada">
+      <div class="tv-wrap">
+        <span class="t-ico tg-fallback"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.8 18.5 7.5 11h9l4.7 7.5" fill="none" stroke="#9db4c4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="2.8" y1="18.5" x2="21.2" y2="18.5" stroke="#7c93a4" stroke-width="1.6"/></svg></span>
+      </div>
+      <span class="tg-lbl">Эстакада</span>
+    </button>
+  </div>
+</div>
+
+<script>
+const canvas=document.getElementById('renderCanvas');
+const engine=new BABYLON.Engine(canvas,true,{stencil:true});
+const scene=new BABYLON.Scene(engine);
+const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&Math.max(screen.width,screen.height)<1100);
+if(isMobile)engine.setHardwareScalingLevel(0.6);
+let MIRROR_SIZE=isMobile?256:1024;
+scene.clearColor=new BABYLON.Color4(0.45,0.72,0.98,1);
+
+// ── размер огороженной территории ──────────────────────────
+const TERR_FILE='tr_babylon_terr';
+function loadTerritory(){try{const d=JSON.parse(localStorage.getItem(TERR_FILE)||'{}');
+  return{w:Math.max(10,Math.min(400,Math.round(d.w||100))),d:Math.max(10,Math.min(400,Math.round(d.d||100)))};}catch(e){return{w:100,d:100};}}
+const TERR=loadTerritory();
+function saveTerritory(){try{localStorage.setItem(TERR_FILE,JSON.stringify({w:TERR.w,d:TERR.d}));}catch(e){}}
+const TERR_FENCE_OFF=0.65,CURB_TH=0.34,CURB_H=0.17,FENCE_STEP=3.2;
+
+// ── Повышение резкости и чёткости изображения ─────────────────────
+scene.imageProcessingConfiguration.sharpenEnabled = true;
+scene.imageProcessingConfiguration.sharpenEdgeStrength = 0.6;
+scene.imageProcessingConfiguration.sharpenColorStrength = 0.4;
+scene.imageProcessingConfiguration.contrast = 1.1;
+scene.imageProcessingConfiguration.exposure = 1.05;
+
+const CAR={length:4.346,width:1.733,height:1.517,wheelbase:2.634,clearance:0.155,wheelD:0.621,frontOverhang:0.818,rearOverhang:0.894};
+CAR.turnDiameter=10.5;
+CAR.turnRadius=(CAR.turnDiameter-CAR.width)/2;
+CAR.wheelR=CAR.wheelD/2;
+CAR.maxSteer=Math.atan(CAR.wheelbase/CAR.turnRadius);
+
+const hemi=new BABYLON.HemisphericLight('hemi',new BABYLON.Vector3(0,1,0),scene);hemi.intensity=0.55;
+const dir=new BABYLON.DirectionalLight('dir',new BABYLON.Vector3(-0.5,-1,-0.3),scene);
+dir.position=new BABYLON.Vector3(60,90,40);dir.intensity=0.9;
+const shadowGen=new BABYLON.ShadowGenerator(isMobile?512:2048,dir);
+  shadowGen.useBlurExponentialShadowMap=true;shadowGen.blurKernel=isMobile?4:16;
+
+const sun=BABYLON.MeshBuilder.CreateSphere('sun',{diameter:8,segments:24},scene);
+sun.position.set(120,140,90);sun.isPickable=false;
+const sunMat=new BABYLON.StandardMaterial('sunMat',scene);
+sunMat.emissiveColor=new BABYLON.Color3(1,0.85,0.4);
+sunMat.emissiveIntensity=6;
+sunMat.diffuseColor=new BABYLON.Color3(0.95,0.9,0.5);
+sunMat.specularColor=new BABYLON.Color3(0,0,0);
+sunMat.disableLighting=true;
+sunMat.fogEnabled=false;
+sun.material=sunMat;
+const glowLayer=new BABYLON.GlowLayer('sunGlow',scene,{kernel:64});
+glowLayer.intensity=1.6;
+glowLayer.useMainTexture=false;
+glowLayer.addIncludedOnlyMesh(sun);
+
+let ground=BABYLON.MeshBuilder.CreateGround('ground',{width:TERR.w,height:TERR.d,subdivisions:2},scene);
+const asphalt=new BABYLON.DynamicTexture('asphaltTex',{width:256,height:256},scene,true);
+const actx=asphalt.getContext();
+actx.fillStyle='rgb(34,34,34)';actx.fillRect(0,0,256,256);
+for(let i=0;i<9000;i++){
+  const x=Math.random()*256,y=Math.random()*256,v=34+(Math.random()*22-11);
+  actx.fillStyle='rgb('+v+','+v+','+v+')';actx.fillRect(x,y,1,1);
+}
+for(let i=0;i<140;i++){
+  const x=Math.random()*256,y=Math.random()*256,r=1.5+Math.random()*4,v=36+(Math.random()*20-10);
+  actx.fillStyle='rgba('+v+','+v+','+v+',0.45)';
+  actx.beginPath();actx.arc(x,y,r,0,Math.PI*2);actx.fill();
+}
+for(let i=0;i<26;i++){
+  const x=Math.random()*256,y=Math.random()*256,l=14+Math.random()*40,a=Math.random()*Math.PI;
+  actx.strokeStyle='rgba(20,20,20,0.35)';actx.lineWidth=1;
+  actx.beginPath();actx.moveTo(x,y);actx.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l);actx.stroke();
+}
+asphalt.update();
+asphalt.wrapU=asphalt.wrapV=BABYLON.Texture.WRAP_ADDRESSMODE;
+asphalt.uScale=TERR.w/4;asphalt.vScale=TERR.d/4;
+const groundMat=new BABYLON.StandardMaterial('gmat',scene);
+groundMat.diffuseColor=new BABYLON.Color3(0.9,0.9,0.9);
+groundMat.diffuseTexture=asphalt;
+groundMat.diffuseTexture.level=1;
+groundMat.specularColor=new BABYLON.Color3(0,0,0);
+ground.material=groundMat;ground.receiveShadows=true;
+
+// ── земля вокруг территории ─────────────────────────────────
+const cityGround=BABYLON.MeshBuilder.CreateGround('cityGround',{width:2000,height:2000},scene);
+const cityGroundMat=new BABYLON.StandardMaterial('cgmat',scene);
+cityGroundMat.diffuseColor=new BABYLON.Color3(0.16,0.18,0.21);
+cityGroundMat.specularColor=new BABYLON.Color3(0,0,0);
+cityGround.material=cityGroundMat;cityGround.position.y=-0.05;cityGround.isPickable=false;
+
+// ── бордюр по периметру территории ─────────────────────────
+const curbMat=new BABYLON.StandardMaterial('curbMat',scene);
+curbMat.diffuseColor=new BABYLON.Color3(0.52,0.53,0.55);
+curbMat.specularColor=new BABYLON.Color3(0.25,0.25,0.25);
+let curbMeshes=[];
+function buildCurbs(){
+  curbMeshes.forEach(m=>{try{m.dispose();}catch(e){}});
+  curbMeshes=[];
+  const hw=TERR.w/2,hd=TERR.d/2;
+  const cLw=TERR.w+CURB_TH*2,cLd=TERR.d+CURB_TH*2;
+  const cOff=hw+CURB_TH/2;
+  const cOff2=hd+CURB_TH/2;
+  const defs=[
+    {w:cLw,h:CURB_H,d:CURB_TH,p:new BABYLON.Vector3(0,0,cOff2)},
+    {w:cLw,h:CURB_H,d:CURB_TH,p:new BABYLON.Vector3(0,0,-cOff2)},
+    {w:CURB_TH,h:CURB_H,d:cLd,p:new BABYLON.Vector3(cOff,0,0)},
+    {w:CURB_TH,h:CURB_H,d:cLd,p:new BABYLON.Vector3(-cOff,0,0)}];
+  defs.forEach((c,i)=>{
+    const box=BABYLON.MeshBuilder.CreateBox('curb'+i,{width:c.w,height:c.h,depth:c.d},scene);
+    box.position.copyFrom(c.p);box.position.y=c.h/2;
+    box.material=curbMat;box.isPickable=false;box.receiveShadows=true;
+    curbMeshes.push(box);});
+}
+buildCurbs();
+
+// ── забор вокруг территории ────────────────────────────────
+const postMat=new BABYLON.StandardMaterial('postMat',scene);
+postMat.diffuseColor=new BABYLON.Color3(0.42,0.46,0.5);
+postMat.specularColor=new BABYLON.Color3(0.4,0.4,0.42);
+postMat.specularPower=64;
+const railMat=new BABYLON.StandardMaterial('railMat',scene);
+railMat.diffuseColor=new BABYLON.Color3(0.88,0.9,0.92);
+railMat.specularColor=new BABYLON.Color3(0.5,0.5,0.5);
+railMat.specularPower=128;
+let fenceMeshes=[];
+function buildFenceAll(){
+  fenceMeshes.forEach(m=>{try{m.dispose();}catch(e){}});
+  fenceMeshes=[];
+  const hw=TERR.w/2,hd=TERR.d/2;
+  // стороны N/S идут вдоль X, E/W — вдоль Z
+  const sides=[
+    {id:'N',alongX:true ,posBase:hd+TERR_FENCE_OFF},
+    {id:'S',alongX:true ,posBase:-(hd+TERR_FENCE_OFF)},
+    {id:'E',alongX:false,posBase:hw+TERR_FENCE_OFF},
+    {id:'W',alongX:false,posBase:-(hw+TERR_FENCE_OFF)}];
+  sides.forEach(s=>{
+    const half=s.alongX?hw:hd;
+    const extent=s.alongX?TERR.w:TERR.d;
+    const n=Math.floor(extent/FENCE_STEP)+1;
+    for(let i=0;i<n;i++){
+      const t=-half+extent*(i/(n-1));
+      const post=BABYLON.MeshBuilder.CreateBox('fPost'+s.id+'_'+i,{width:0.08,height:1.7,depth:0.08},scene);
+      if(s.alongX)post.position.set(t,0.85,s.posBase);
+      else post.position.set(s.posBase,0.85,t);
+      post.material=postMat;post.isPickable=false;
+      fenceMeshes.push(post);
+    }
+    const railH=[0.8,1.5];
+    railH.forEach((h,j)=>{
+      const rail=BABYLON.MeshBuilder.CreateBox('fRail'+s.id+'_'+j,
+        {width:s.alongX?extent:0.06,height:0.06,depth:s.alongX?0.06:extent},scene);
+      if(s.alongX)rail.position.set(0,h,s.posBase);
+      else rail.position.set(s.posBase,h,0);
+      rail.material=railMat;rail.isPickable=false;
+      fenceMeshes.push(rail);
+    });
+  });
+}
+buildFenceAll();
+
+// ── сетка и оси внутри территории ───────────────────────────
+function gridLines(step,halfX,halfZ,y){const lines=[];
+  for(let i=-halfX;i<=halfX+1e-6;i+=step){
+    lines.push([new BABYLON.Vector3(i,y,-halfZ),new BABYLON.Vector3(i,y,halfZ)]);}
+  for(let i=-halfZ;i<=halfZ+1e-6;i+=step){
+    lines.push([new BABYLON.Vector3(-halfX,y,i),new BABYLON.Vector3(halfX,y,i)]);}
+  return lines;}
+let grid=null,axes=null;
+function buildGridAxes(){
+  const hw=TERR.w/2,hd=TERR.d/2;
+  const vis=grid?grid.isVisible:false;
+  if(grid){grid.dispose();grid=null;}
+  if(axes){axes.dispose();axes=null;}
+  grid=BABYLON.MeshBuilder.CreateLineSystem('grid',{lines:gridLines(0.5,hw,hd,0.01)},scene);
+  grid.color=new BABYLON.Color3(0.30,0.30,0.30);grid.isPickable=false;grid.isVisible=vis;
+  axes=BABYLON.MeshBuilder.CreateLineSystem('axes',{lines:[
+    [new BABYLON.Vector3(0,0.02,-hd),new BABYLON.Vector3(0,0.02,hd)],
+    [new BABYLON.Vector3(-hw,0.02,0),new BABYLON.Vector3(hw,0.02,0)]]},scene);
+  axes.color=new BABYLON.Color3(0.55,0.55,0.55);axes.isPickable=false;axes.isVisible=vis;
+}
+buildGridAxes();
+
+// смена размера территории (полный пересбор) ─────────────────
+function rebuildTerritory(w,d){
+  TERR.w=Math.max(10,Math.min(400,Math.round(w||100)));
+  TERR.d=Math.max(10,Math.min(400,Math.round(d||100)));
+  ground.dispose();
+  ground=BABYLON.MeshBuilder.CreateGround('ground',{width:TERR.w,height:TERR.d,subdivisions:2},scene);
+  ground.material=groundMat;ground.receiveShadows=true;
+  asphalt.uScale=TERR.w/4;asphalt.vScale=TERR.d/4;
+  camera.upperRadiusLimit=Math.max(220,Math.max(TERR.w,TERR.d)*1.4);
+  buildCurbs();
+  buildFenceAll();
+  buildGridAxes();
+  if(typeof setTerritoryLimits==='function')setTerritoryLimits(TERR.w/2,TERR.d/2);
+  saveTerritory();
+  if(typeof updateMirrorRenderList==='function')updateMirrorRenderList();
+}
+
+// ── машина ─────────────────────────────────────────────
+let car=null,steerPivots=[],spinPivots=[],primitiveRoot=null,modelCarRoot=null;
+let cabMode=false;const cabMats=new Map();
+let camFollow=true;
+let headYaw=0,headPitch=0,headTurn=false;
+const cfgTouches=new Map();let pinchActive=false,pinchDist=0,pinchFov0=0;
+let carHeight=CAR.height;
+let steeringWheelNode=null,steeringBaseQuat=null,steeringLocalAxis=null,blinkTimer=0;
+
+let leftGlow=null,rightGlow=null,leftZone=null,rightZone=null;
+let leftFGlow=null,rightFGlow=null;
+let leftMirr=null,rightMirr=null;
+function createPrimitiveCar(){
+  const root=new BABYLON.TransformNode('car',scene);
+  const paint=new BABYLON.StandardMaterial('paint',scene);paint.diffuseColor=new BABYLON.Color3(0.82,0.84,0.86);paint.specularColor=new BABYLON.Color3(0.5,0.5,0.5);
+  const glass=new BABYLON.StandardMaterial('glass',scene);glass.diffuseColor=new BABYLON.Color3(0.10,0.13,0.17);glass.specularColor=new BABYLON.Color3(0.5,0.5,0.5);
+  const wmat=new BABYLON.StandardMaterial('wmat',scene);wmat.diffuseColor=new BABYLON.Color3(0.10,0.10,0.10);
+  const lf=new BABYLON.StandardMaterial('lf',scene);lf.emissiveColor=new BABYLON.Color3(1,0.95,0.7);
+  const lr=new BABYLON.StandardMaterial('lr',scene);lr.emissiveColor=new BABYLON.Color3(0.9,0.1,0.1);
+  const bodyH=0.60;
+  const body=BABYLON.MeshBuilder.CreateBox('body',{width:CAR.width,height:bodyH,depth:CAR.length},scene);
+  body.parent=root;body.position.y=CAR.clearance+bodyH/2;body.material=paint;
+  const cabinH=CAR.height-(CAR.clearance+bodyH);
+  const cabin=BABYLON.MeshBuilder.CreateBox('cabin',{width:CAR.width*0.86,height:cabinH,depth:CAR.length*0.5},scene);
+  cabin.parent=root;cabin.position.y=(CAR.clearance+bodyH)+cabinH/2;cabin.position.z=-CAR.length*0.02;cabin.material=glass;
+  [-CAR.width*0.32,CAR.width*0.32].forEach((x,i)=>{
+    const hl=BABYLON.MeshBuilder.CreateBox('hl'+i,{width:0.34,height:0.14,depth:0.06},scene);
+    hl.parent=root;hl.position.set(x,CAR.clearance+bodyH*0.6,CAR.length/2+0.01);hl.material=lf;
+    const tl=BABYLON.MeshBuilder.CreateBox('tl'+i,{width:0.30,height:0.16,depth:0.06},scene);
+    tl.parent=root;tl.position.set(x,CAR.clearance+bodyH*0.6,-CAR.length/2-0.01);tl.material=lr;});
+  const frontZ=CAR.length/2-CAR.frontOverhang,rearZ=-(CAR.length/2-CAR.rearOverhang),wx=CAR.width/2-0.095;
+  const spinNodes=[],frontSteers=[];
+  [{x:wx,z:frontZ,f:1},{x:-wx,z:frontZ,f:1},{x:wx,z:rearZ,f:0},{x:-wx,z:rearZ,f:0}].forEach((wd,i)=>{
+    const pos=new BABYLON.Vector3(wd.x,CAR.wheelR,wd.z);let parent=root;
+    if(wd.f){const s=new BABYLON.TransformNode('steer'+i,scene);s.parent=root;s.position.copyFrom(pos);frontSteers.push(s);parent=s;}
+    const sp=new BABYLON.TransformNode('spin'+i,scene);sp.parent=parent;if(!wd.f)sp.position.copyFrom(pos);
+    const w=BABYLON.MeshBuilder.CreateCylinder('w'+i,{diameter:CAR.wheelD,height:0.19,tessellation:24},scene);
+    w.parent=sp;w.rotation.z=Math.PI/2;w.material=wmat;shadowGen.addShadowCaster(w);spinNodes.push(sp);});
+  [body,cabin].forEach(m=>shadowGen.addShadowCaster(m));
+  return{root,spinNodes,frontSteers};
+}
+function usePrimitiveCar(){const o=createPrimitiveCar();car=o.root;primitiveRoot=o.root;
+  steerPivots=o.frontSteers;spinPivots=o.spinNodes.map(n=>({node:n,radius:CAR.wheelR}));
+  carHeight=CAR.height;
+  if(cabMode)applyCabMaterials(true);}
+function disposeCurrentCar(){
+  disposeMirrors();
+  if(primitiveRoot){primitiveRoot.getChildMeshes().forEach(m=>shadowGen.removeShadowCaster(m));primitiveRoot.dispose();primitiveRoot=null;}
+  if(modelCarRoot){modelCarRoot.getChildMeshes().forEach(m=>shadowGen.removeShadowCaster(m));modelCarRoot.dispose();modelCarRoot=null;}
+  steerPivots=[];spinPivots=[];
+}
+function aggregateBB(node){
+  const min=new BABYLON.Vector3(Infinity,Infinity,Infinity),max=new BABYLON.Vector3(-Infinity,-Infinity,-Infinity);
+  node.getChildMeshes().forEach(m=>{m.computeWorldMatrix(true);
+    const b=m.getBoundingInfo().boundingBox;min.minimizeInPlace(b.minimumWorld);max.maximizeInPlace(b.maximumWorld);});
+  return{min,max,size:max.subtract(min),center:min.add(max).scale(0.5)};
+}
+
+// применить загруженный файл как машину
+function rotateModel(node,yaw,pitch){
+  if(node.rotationQuaternion){
+    let q=node.rotationQuaternion.clone();
+    if(yaw)q=BABYLON.Quaternion.RotationAxis(BABYLON.Axis.Y,yaw).multiply(q);
+    if(pitch)q=BABYLON.Quaternion.RotationAxis(BABYLON.Axis.X,pitch).multiply(q);
+    node.rotationQuaternion=q;
+  }else{
+    node.rotation.y+=(yaw||0);
+    node.rotation.x+=(pitch||0);
+  }
+}
+function splitWideWheel(mesh){
+  const geo=mesh.geometry;if(!geo)return null;
+  const pos=geo.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+  const idx=geo.getIndices();if(!idx||!pos)return null;
+  const no=geo.getVerticesData(BABYLON.VertexBuffer.NormalKind);
+  const uv=geo.getVerticesData(BABYLON.VertexBuffer.UVKind);
+  const col=geo.getVerticesData(BABYLON.VertexBuffer.ColorKind);
+  const wm=mesh.computeWorldMatrix(true).clone();
+  const wx=v=>BABYLON.Vector3.TransformCoordinates(new BABYLON.Vector3(pos[v],pos[v+1],pos[v+2]),wm).x;
+  const res=[];
+  for(const sign of[-1,1]){
+    const vmap=new Map(),p=[],n=[],u=[],c=[],oi=[];
+    for(let i=0;i<idx.length;i+=3){
+      const a=idx[i]*3,b=idx[i+1]*3,cc=idx[i+2]*3;
+      const cx=(wx(a)+wx(b)+wx(cc))/3;
+      if((sign<0&&cx>-0.03)||(sign>0&&cx<0.03))continue;
+      for(const vi of[a,b,cc]){
+        const vvi=vi/3;let nv=vmap.get(vvi);
+        if(nv===undefined){nv=p.length/3;vmap.set(vvi,nv);
+          for(let j=0;j<3;j++)p.push(pos[vi+j]);
+          if(no)for(let j=0;j<3;j++)n.push(no[vi+j]);
+          if(uv){u.push(uv[vvi*2],uv[vvi*2+1]);}
+          if(col)for(let j=0;j<4;j++)c.push(col[vvi*4+j]);
+        }
+        oi.push(nv);
+      }
+    }
+    if(!oi.length)continue;
+    const vd=new BABYLON.VertexData();
+    vd.positions=p;if(no)vd.normals=n;if(uv)vd.uvs=u;if(col)vd.colors=c;vd.indices=oi;
+    const m=new BABYLON.Mesh(mesh.name+'_Wheel'+(sign<0?'L':'R'),scene);
+    vd.applyToMesh(m);
+    m.material=mesh.material;
+    m.parent=mesh.parent;m.position.copyFrom(mesh.position);
+    m.rotation.copyFrom(mesh.rotation);
+    if(mesh.rotationQuaternion)m.rotationQuaternion=mesh.rotationQuaternion.clone();else m.rotationQuaternion=null;
+    m.scaling.copyFrom(mesh.scaling);
+    m.isPickable=false;
+    res.push(m);
+  }
+  return res.length?res:null;
+}
+function adoptLoadedModel(newMeshes,label,flip,pitchFlip){
+  const modelRoot=newMeshes.find(m=>m.name==='__root__')
+    ||newMeshes.find(m=>!m.parent&&!['ground','grid','axes','preview'].includes(m.name))
+    ||newMeshes[0];
+  const carRoot=new BABYLON.TransformNode('carRoot',scene);
+  modelRoot.setParent(carRoot,true);
+  let bb=aggregateBB(modelRoot);
+  const yaw=(bb.size.x>bb.size.z?Math.PI/2:0)+(flip?Math.PI:0)+(pitchFlip?Math.PI:0);
+  rotateModel(modelRoot,yaw,pitchFlip?Math.PI:0);
+  modelRoot.computeWorldMatrix(true);bb=aggregateBB(modelRoot);
+  const s=CAR.length/Math.max(bb.size.x,bb.size.z);
+  modelRoot.scaling.setAll(s);
+  modelRoot.computeWorldMatrix(true);bb=aggregateBB(modelRoot);
+  modelRoot.position.x-=bb.center.x;modelRoot.position.z-=bb.center.z;modelRoot.position.y-=bb.min.y;
+  modelRoot.computeWorldMatrix(true);
+  carHeight=bb.size.y;
+  const steer=[],spin=[];
+  const parts=modelRoot.getChildMeshes();
+  parts.forEach(m=>{shadowGen.addShadowCaster(m);m.isPickable=false;});
+  const isWheelName=n=>/wheel|tire|tyre|roue/i.test(n)&&!/steering/i.test(n);
+  const wheelAncestors=new Set();
+  const carW=bb.size.x,splitThr=carW*0.7;
+  const wheelParts=[],wide=[];
+  parts.forEach(p=>{
+    if(!isWheelName(p.name))return;
+    let a=p.parent;
+    while(a&&a!==modelRoot){if(wheelAncestors.has(a))return;a=a.parent;}
+    p.computeWorldMatrix(true);
+    const b=p.getBoundingInfo().boundingBox,ww=b.maximumWorld,mi=b.minimumWorld;
+    if(ww.x-mi.x>splitThr){wide.push(p);return;}
+    wheelAncestors.add(p);wheelParts.push(p);
+  });
+  wide.forEach(p=>{try{
+    const h=splitWideWheel(p);
+    if(h){h.forEach(n=>{n.computeWorldMatrix(true);wheelAncestors.add(n);shadowGen.addShadowCaster(n);wheelParts.push(n);});p.dispose();}
+    else wheelParts.push(p);
+  }catch(e){wheelParts.push(p);}});
+  const clusters=new Map();
+  const clusterAdd=(m)=>{try{
+    const c=m.getBoundingInfo().boundingBox.centerWorld;
+    const key=Math.round(c.x/0.6)+'_'+Math.round(c.y/0.2)+'_'+Math.round(c.z/0.2);
+    if(!clusters.has(key))clusters.set(key,[]);
+    clusters.get(key).push(m);
+  }catch(e){}};
+  wheelParts.forEach(m=>clusterAdd(m));
+  const groups=[];clusters.forEach(ms=>{
+    let gx=0,gy=0,gz=0;
+    ms.forEach(m=>{const c=m.getBoundingInfo().boundingBox.centerWorld;gx+=c.x;gy+=c.y;gz+=c.z;});
+    groups.push({ms,cx:gx/ms.length,cy:gy/ms.length,cz:gz/ms.length});
+  });
+  const parent=groups.map((_,i)=>i),find=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;};
+  const TH=0.45*0.45;
+  for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++){
+    const dx=groups[i].cx-groups[j].cx,dy=groups[i].cy-groups[j].cy,dz=groups[i].cz-groups[j].cz;
+    if(dx*dx+dy*dy+dz*dz<TH){const a=find(i),b=find(j);if(a!==b)parent[a]=b;}
+  }
+  const merged=new Map();
+  groups.forEach((g,i)=>{const r=find(i);if(!merged.has(r))merged.set(r,[]);merged.get(r).push(...g.ms);});
+  merged.forEach(ms=>{try{
+    const mn=new BABYLON.Vector3(Infinity,Infinity,Infinity),mx=new BABYLON.Vector3(-Infinity,-Infinity,-Infinity);
+    ms.forEach(m=>{const b=m.getBoundingInfo().boundingBox;
+      mn.minimizeInPlace(b.minimumWorld);mx.maximizeInPlace(b.maximumWorld);});
+    const cx=(mn.x+mx.x)/2,cy=(mn.y+mx.y)/2,cz=(mn.z+mx.z)/2;
+    const r=Math.max(0.15,(mx.y-mn.y)/2);
+    let pivotParent=carRoot,off=new BABYLON.Vector3(cx,cy,cz);
+    if(cz>0){const st=new BABYLON.TransformNode('steer',scene);st.parent=carRoot;st.position.set(cx,0,cz);
+      steer.push(st);pivotParent=st;off=new BABYLON.Vector3(0,cy,0);}
+    const sp=new BABYLON.TransformNode('spin',scene);sp.parent=pivotParent;sp.position.copyFrom(off);
+    ms.forEach(m=>m.setParent(sp,true));
+    spin.push({node:sp,radius:r||CAR.wheelR});
+  }catch(e){}});
+  disposeCurrentCar();
+  modelCarRoot=carRoot;car=carRoot;steerPivots=steer;spinPivots=spin;
+  car.position.set(0,0,0);
+  collectDecalMeshes(car);
+  setupCarExtras(modelRoot);
+  if(cabMode)applyCabMaterials(true);
+}
+
+function clipHalf(mesh,dir,label,band){
+  const B=band||1e9;
+  const geo=mesh.geometry;if(!geo)return null;
+  const pos=geo.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+  const idx=geo.getIndices();if(!idx||!pos)return null;
+  const no=geo.getVerticesData(BABYLON.VertexBuffer.NormalKind);
+  const uv=geo.getVerticesData(BABYLON.VertexBuffer.UVKind);
+  const col=geo.getVerticesData(BABYLON.VertexBuffer.ColorKind);
+  const wm=mesh.computeWorldMatrix(true).clone();
+  const wx=v=>BABYLON.Vector3.TransformCoordinates(new BABYLON.Vector3(pos[v],pos[v+1],pos[v+2]),wm).x;
+  const vmap=new Map(),p=[],n=[],u=[],c=[],oi=[];
+  for(let i=0;i<idx.length;i+=3){
+    const a=idx[i]*3,b=idx[i+1]*3,cc=idx[i+2]*3;
+    const cx=(wx(a)+wx(b)+wx(cc))/3;
+    if((dir<0&&(cx>-0.002||cx<-B))||(dir>0&&(cx<0.002||cx>B)))continue;
+    for(const vi of[a,b,cc]){
+      const vvi=vi/3;let nv=vmap.get(vvi);
+      if(nv===undefined){nv=p.length/3;vmap.set(vvi,nv);
+        for(let j=0;j<3;j++)p.push(pos[vi+j]);
+        if(no)for(let j=0;j<3;j++)n.push(no[vi+j]);
+        if(uv){u.push(uv[vvi*2],uv[vvi*2+1]);}
+        if(col)for(let j=0;j<4;j++)c.push(col[vvi*4+j]);
+      }
+      oi.push(nv);
+    }
+  }
+  if(!oi.length)return null;
+  const vd=new BABYLON.VertexData();
+  vd.positions=p;if(no)vd.normals=n;if(uv)vd.uvs=u;if(col)vd.colors=c;vd.indices=oi;
+  const m=new BABYLON.Mesh(mesh.name+label,scene);
+  vd.applyToMesh(m);
+  m.material=mesh.material;
+  m.parent=mesh.parent;
+  m.position.copyFrom(mesh.position);m.rotation.copyFrom(mesh.rotation);
+  if(mesh.rotationQuaternion)m.rotationQuaternion=mesh.rotationQuaternion.clone();else m.rotationQuaternion=null;
+  m.scaling.copyFrom(mesh.scaling);
+  m.isPickable=false;m.isVisible=false;
+  return m;
+}
+function makeBlinkZone(side,sign,gl,parent){
+  gl.computeWorldMatrix(true);gl.refreshBoundingInfo();
+  const b=gl.getBoundingInfo().boundingBox;
+  const cw=b.centerWorld;
+  const ex=b.maximumWorld.x-b.minimumWorld.x;
+  const m=BABYLON.MeshBuilder.CreateBox('blinkZone'+side,{width:ex*0.55,height:0.08,depth:0.012},scene);
+  m.position.set(cw.x+sign*ex*0.18,cw.y,b.maximumWorld.z+0.012);
+  m.parent=parent;
+  const mat=new BABYLON.StandardMaterial('blinkZMat'+side,scene);
+  mat.emissiveColor=new BABYLON.Color3(1,0.6,0.1);
+  mat.diffuseColor=new BABYLON.Color3(0.4,0.28,0.05);
+  mat.specularColor=new BABYLON.Color3(0,0,0);
+  mat.backFaceCulling=false;
+  m.material=mat;m.isPickable=false;m.isVisible=false;
+  return m;
+}
+function makeBlinkMat(name){
+  const mat=new BABYLON.StandardMaterial(name,scene);
+  mat.emissiveColor=new BABYLON.Color3(1.3,1.0,0.35);
+  mat.emissiveIntensity=8;
+  mat.diffuseColor=new BABYLON.Color3(0.6,0.5,0.1);
+  mat.specularColor=new BABYLON.Color3(0,0,0);
+  mat.backFaceCulling=false;
+  return mat;
+}
+function makeMirrorZone(side,mir,parent){
+  mir.computeWorldMatrix(true);mir.refreshBoundingInfo();
+  const b=mir.getBoundingInfo().boundingBox;
+  const cw=b.centerWorld;
+  const ex=b.maximumWorld.x-b.minimumWorld.x;
+  const dz=b.maximumWorld.z-b.minimumWorld.z;
+  const m=BABYLON.MeshBuilder.CreateBox('mirBlink'+side,{width:0.015,height:0.022,depth:Math.max(0.12,dz*0.4)},scene);
+  const out=Math.sign(cw.x)||1;
+  m.position.set(cw.x+out*(ex/2+0.012),cw.y,b.minimumWorld.z+Math.max(0.05,dz*0.35));
+  m.parent=parent;
+  const mat=new BABYLON.StandardMaterial('mirBlinkMat'+side,scene);
+  mat.emissiveColor=new BABYLON.Color3(1,0.85,0.2);
+  mat.emissiveIntensity=3;
+  mat.diffuseColor=new BABYLON.Color3(0.5,0.42,0.08);
+  mat.specularColor=new BABYLON.Color3(0,0,0);
+  mat.backFaceCulling=false;
+  m.material=mat;m.isPickable=false;m.isVisible=false;
+  return m;
+}
+function setupCarExtras(modelRoot){
+  // Очистка старых отражений
+  disposeMirrors();
+  steeringWheelNode=null;steeringBaseQuat=null;steeringLocalAxis=null;blinkTimer=0;
+  blinkerLeft=false;blinkerRight=false;
+  leftGlow=rightGlow=null;if(leftZone){leftZone.dispose();rightZone.dispose();leftZone=rightZone=null;}
+  if(leftFGlow){leftFGlow.dispose();rightFGlow.dispose();leftFGlow=rightFGlow=null;}
+  if(leftMirr){leftMirr.dispose();rightMirr.dispose();leftMirr=rightMirr=null;}
+  const parts=modelRoot.getChildMeshes();
+  const wheels=parts.filter(m=>/steering_wheel/i.test(m.name));
+  const wn=wheels.length?wheels[0].parent:null;
+  if(wn&&wheels.length){
+    const pivot=new BABYLON.TransformNode('SWpivot',scene);
+    pivot.parent=wn.parent||modelRoot;
+    pivot.scaling.copyFrom(wn.scaling);
+    if(wn.rotationQuaternion)pivot.rotationQuaternion=wn.rotationQuaternion.clone();
+    else pivot.rotationQuaternion=BABYLON.Quaternion.FromEulerAngles(wn.rotation.x,wn.rotation.y,wn.rotation.z);
+    const Vtx=[],Idx=[];
+    const hubMs=wheels;
+    hubMs.forEach(m=>{
+      const geo=m.geometry;if(!geo)return;
+      const pos=geo.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+      const iid=geo.getIndices();
+      if(!pos||!iid)return;
+      m.computeWorldMatrix(true);const wm=m.getWorldMatrix();
+      const base=Vtx.length;
+      for(let i=0;i<pos.length;i+=3)
+        Vtx.push(BABYLON.Vector3.TransformCoordinates(new BABYLON.Vector3(pos[i],pos[i+1],pos[i+2]),wm));
+      iid.forEach(x=>Idx.push(base+x));
+    });
+    const V=BABYLON.Vector3;
+    const hub=new BABYLON.Vector3(0,0,0);
+    Vtx.forEach(v=>hub.addInPlace(v));hub.scaleInPlace(1/Vtx.length);
+    hub.y+=0.02;
+    let nrm=new BABYLON.Vector3(0,0,0),kc=0;
+    for(let i=0;i+2<Idx.length;i+=3){
+      const a=Vtx[Idx[i]],b=Vtx[Idx[i+1]],c3=Vtx[Idx[i+2]];
+      const cr=BABYLON.Vector3.Cross(b.subtract(a),c3.subtract(a));
+      const l=cr.length();
+      if(l>1e-12){nrm.addInPlace(cr.scale(1/l));kc++;}
+    }
+    nrm.scaleInPlace(1/(kc||1)).normalize();
+    if(nrm.z<0)nrm.scaleInPlace(-1);
+    if(pivot.parent){
+      const pl=pivot.parent.getWorldMatrix().clone().invert();
+      pivot.position=BABYLON.Vector3.TransformCoordinates(hub,pl);
+    }else pivot.position.copyFrom(hub);
+    wheels.forEach(m=>m.setParent(pivot,true));
+    steeringWheelNode=pivot;
+    steeringBaseQuat=pivot.rotationQuaternion.clone();
+    const inv=pivot.getWorldMatrix(true).clone().invert();
+    const tilt=0.349;
+    const wAxis=new BABYLON.Vector3(0,-Math.sin(tilt),Math.cos(tilt));
+    steeringLocalAxis=BABYLON.Vector3.TransformNormal(wAxis,inv).normalize();
+  }else steeringLocalAxis=null;
+  const glowM=parts.find(m=>/rear_indicator/i.test(m.name)&&/_glow/i.test(m.name));
+  if(glowM){
+    leftGlow=clipHalf(glowM,-1,'_tL');rightGlow=clipHalf(glowM,1,'_tR');
+    if(leftGlow&&rightGlow){
+      glowM.isVisible=false;
+      const gmat=makeBlinkMat('rearBlinkY'+glowM.name);
+      leftGlow.material=gmat;rightGlow.material=gmat;
+    }
+    else{leftGlow=rightGlow=null;}
+  }
+  const hg=parts.find(m=>/headlight/i.test(m.name)&&/glass_light/i.test(m.name));
+  if(hg){
+    leftFGlow=clipHalf(hg,-1,'_fL',0.58);rightFGlow=clipHalf(hg,1,'_fR',0.58);
+    if(leftFGlow&&rightFGlow){
+      const gmat=makeBlinkMat('headBlinkY'+hg.name);
+      leftFGlow.material=gmat;rightFGlow.material=gmat;
+    }
+    else leftFGlow=rightFGlow=null;
+  }
+  const mirrors=parts.filter(m=>/mirror/i.test(m.name)&&/door_mesh/i.test(m.name));
+  if(mirrors.length){
+    let mNeg=null,mPos=null;
+    mirrors.forEach(m=>{
+      m.computeWorldMatrix(true);
+      const cx=m.getBoundingInfo().boundingBox.centerWorld.x;
+      if(cx<0)mNeg=m;else mPos=m;
+    });
+    leftMirr=mNeg?makeMirrorZone('L',mNeg,car):null;
+    rightMirr=mPos?makeMirrorZone('R',mPos,car):null;
+  }
+  
+  // Настройка отражений в зеркалах (с pivot для регулировки)
+  setupMirrorReflections(modelRoot);
+}
+
+// ── Декали: сбор и управление видимостью через UI ─────────────
+const DECAL_STORE='tr_babylon_decal_visibility';
+let decalMeshes=[];
+const decalKey=n=>{try{return n.replace(/_Decals_0$/,'');}catch(e){return n;}};
+function collectDecalMeshes(root){
+  decalMeshes=[];
+  const meshes=root&&root.getChildMeshes?root.getChildMeshes():[];
+  meshes.forEach(m=>{
+    const mat=m.material;if(!mat)return;
+    const alb=mat.albedoColor||mat.diffuseColor;
+    const em=mat.emissiveColor;
+    if(!alb||!em)return;
+    if(mat.albedoTexture||mat.diffuseTexture)return;
+    const alpha=typeof mat.alpha==='number'?mat.alpha:1;
+    if(alpha<0.99)return;
+    const white=alb.r>0.85&&alb.g>0.85&&alb.b>0.85;
+    const glow=em.r>0.4&&em.g>0.4&&em.b>0.4;
+    if(white&&glow)decalMeshes.push(m);
+  });
+  loadDecalVisibility();
+}
+function loadDecalVisibility(){
+  let st={};
+  try{st=JSON.parse(localStorage.getItem(DECAL_STORE)||'{}');}catch(e){}
+  decalMeshes.forEach(m=>{
+    const k=decalKey(m.name);
+    m.isVisible=st[k]===undefined?true:!!st[k];
+  });
+  buildDecalList();
+}
+function saveDecalVisibility(){
+  const st={};
+  decalMeshes.forEach(m=>{st[decalKey(m.name)]=m.isVisible;});
+  try{localStorage.setItem(DECAL_STORE,JSON.stringify(st));}catch(e){}
+}
+function buildDecalList(){
+  const el=document.getElementById('decalList');if(!el)return;
+  el.innerHTML='';
+  decalMeshes.forEach(m=>{
+    const row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;cursor:pointer;word-break:break-all';
+    const cb=document.createElement('input');
+    cb.type='checkbox';cb.checked=m.isVisible;
+    cb.addEventListener('change',()=>{m.isVisible=cb.checked;saveDecalVisibility();});
+    const sp=document.createElement('span');
+    sp.textContent=m.name;
+    row.appendChild(cb);row.appendChild(sp);
+    el.appendChild(row);
+  });
+  refreshDecalPresets();
+}
+
+function refreshDecalPresets(){
+  const anyHidden=decalMeshes.some(m=>!m.isVisible);
+  const anyShown=decalMeshes.some(m=>m.isVisible);
+  const sA=document.getElementById('decalShowAll'),hA=document.getElementById('decalHideAll');
+  if(sA)sA.classList.toggle('active',anyHidden);
+  if(hA)hA.classList.toggle('active',anyShown);
+}
+
+function toggleBlink(){
+  const on=(blinkTimer%0.55)<0.30;
+  if(blinkerLeft){if(leftGlow)leftGlow.isVisible=on;if(leftFGlow)leftFGlow.isVisible=on;if(leftMirr)leftMirr.isVisible=on;}
+  else{if(leftGlow)leftGlow.isVisible=false;if(leftFGlow)leftFGlow.isVisible=false;if(leftMirr)leftMirr.isVisible=false;}
+  if(blinkerRight){if(rightGlow)rightGlow.isVisible=on;if(rightFGlow)rightFGlow.isVisible=on;if(rightMirr)rightMirr.isVisible=on;}
+  else{if(rightGlow)rightGlow.isVisible=false;if(rightFGlow)rightFGlow.isVisible=false;if(rightMirr)rightMirr.isVisible=false;}
+}
+
+// загрузка модели по url / метке
+async function loadModelByName(name,pitchFlip){
+  const isGLTF=/\.gltf$/i.test(name);
+  const isGLB=/\.glb$/i.test(name);
+  const flip=/_flip\.(glb|gltf)$/i.test(name);
+  try{
+    const before=new Set(scene.meshes);
+    await BABYLON.SceneLoader.AppendAsync('',name,scene,null,isGLTF?'.gltf':'.glb');
+    const nm=scene.meshes.filter(m=>!before.has(m));
+    if(nm.length)adoptLoadedModel(nm,name,flip,!!pitchFlip);
+  }catch(err){
+    console.warn(err);
+  }
+}
+
+// модели из папки auto — константы с полными названиями и путями
+usePrimitiveCar();
+loadModelByName('auto/toyota_camry.glb',true);
+
+const camera=new BABYLON.ArcRotateCamera('cam',-Math.PI/2,1.15,11,new BABYLON.Vector3(0,0,0),scene);
+camera.attachControl(canvas,true);
+camera.lowerRadiusLimit=5;camera.upperRadiusLimit=220;camera.upperBetaLimit=Math.PI/2-0.02;
+camera.panningSensibility=0;camera.wheelDeltaPercentage=0.01;camera.minZ=0.1;camera.maxZ=1500;
+
+const cabCam=new BABYLON.UniversalCamera('cab',new BABYLON.Vector3(0,1.5,0),scene);
+cabCam.minZ=0.05;cabCam.maxZ=1500;
+let cabFovDeg=85;
+const fovEl=document.getElementById('cabFov'),fovValEl=document.getElementById('cabFovV');
+function applyCabFov(){cabCam.fov=cabFovDeg*Math.PI/180;}
+applyCabFov();
+if(fovEl){fovEl.value=cabFovDeg;fovValEl.textContent=Math.round(cabFovDeg)+'°';
+  fovEl.addEventListener('input',()=>{cabFovDeg=parseFloat(fovEl.value)||85;
+    fovValEl.textContent=Math.round(cabFovDeg)+'°';applyCabFov();});}
+const cabBtn=document.getElementById('cabBtn');
+function applyCabMaterials(on){
+  if(!car)return;
+  car.getChildMeshes().forEach(m=>{const mat=m.material;
+    if(!mat||(mat.metadata&&mat.metadata.isCone))return;
+    if(on){if(!cabMats.has(mat))cabMats.set(mat,mat.backFaceCulling);mat.backFaceCulling=false;}
+    else if(cabMats.has(mat)){mat.backFaceCulling=cabMats.get(mat);}});
+}
+function setCabMode(b){
+  cabMode=b;
+  if(b){headYaw=0;headPitch=0;}else headTurn=false;
+  cabBtn.textContent=b?'Обзор: сзади (V)':'Обзор: кабина (V)';
+  cabBtn.classList.toggle('active',b);
+  scene.activeCamera=b?cabCam:camera;
+  if(typeof setMirrorQuality==='function')setMirrorQuality(b?(isMobile?2048:2048):(isMobile?256:1024));
+  if(typeof setMirrorActive==='function')setMirrorActive(b);
+  if(b){camera.detachControl();applyCabMaterials(true);}
+  else{applyCabMaterials(false);camera.detachControl();camera.attachControl(canvas,true);}
+  syncDvView();
+}
+cabBtn.addEventListener('click',()=>setCabMode(!cabMode));
+
+let camFollowBtn=document.getElementById('camFollowBtn');
+function syncCamFollowBtn(){
+  if(!camFollowBtn)return;
+  camFollowBtn.textContent='Автоповорот камеры: '+(camFollow?'вкл (F)':'выкл (F)');
+  camFollowBtn.classList.toggle('active',camFollow);
+}
+camFollowBtn.addEventListener('click',()=>{camFollow=!camFollow;syncCamFollowBtn();});
+syncCamFollowBtn();
+
+canvas.addEventListener('pointerdown',e=>{
+  if(e.target!==canvas)return;
+  cfgTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pickMode){
+    const r=canvas.getBoundingClientRect();
+    const hit=scene.pick(e.clientX-r.left,e.clientY-r.top,
+      m=>!(m.name==='ground'||m.name==='grid'||(m.metadata&&m.metadata.isCone)||m.name==='axes'||m.name==='preview'));
+    const pm=hit&&hit.pickedMesh?hit.pickedMesh:null;
+    let desc='ничего';
+    if(pm){
+      let col='';
+      const c=pm.material&&(pm.material.albedoColor||pm.material.diffuseColor);
+      if(c)col=' A='+c.r.toFixed(1)+','+c.g.toFixed(1)+','+c.b.toFixed(1);
+      desc=pm.name+' | '+((pm.material&&pm.material.name)||'-')+col;
+    }
+    console.log('PICK::'+desc);
+    pickMode=false;
+    const h=document.getElementById('hintline');
+    if(h)h.textContent='Выбрана деталь: '+desc;
+    return;
+  }
+  if(cabMode&&!dragging){
+    if(cfgTouches.size===2){
+      headTurn=false;
+      const pts=[...cfgTouches.values()];
+      pinchDist=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);
+      pinchFov0=cabFovDeg;
+      pinchActive=true;
+    }else{headTurn=true;lastPtr={x:e.clientX,y:e.clientY};}
+  }
+});
+function clearPinch(e){cfgTouches.delete(e.pointerId);if(cfgTouches.size<2){pinchActive=false;pinchDist=0;}}
+addEventListener('pointerup',e=>{clearPinch(e);headTurn=false;lastPtr=null;});
+addEventListener('pointercancel',e=>{clearPinch(e);headTurn=false;lastPtr=null;});
+addEventListener('blur',()=>{headTurn=false;pinchActive=false;pinchDist=0;cfgTouches.clear();});
+let lastPtr=null;
+addEventListener('pointermove',e=>{
+  if(pinchActive&&cfgTouches.has(e.pointerId)){
+    cfgTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(cfgTouches.size===2){
+      const pts=[...cfgTouches.values()];
+      const d=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);
+      if(pinchDist>0&&d>0){
+        cabFovDeg=Math.max(40,Math.min(120,pinchFov0*pinchDist/d));
+        applyCabFov();
+        if(fovEl)fovEl.value=cabFovDeg;
+        if(fovValEl)fovValEl.textContent=Math.round(cabFovDeg)+'°';
+      }
+    }
+    return;
+  }
+  if(cabMode&&headTurn&&!dragging){
+    let mx=e.movementX||0,my=e.movementY||0;
+    if(!mx&&!my&&lastPtr){mx=e.clientX-lastPtr.x;my=e.clientY-lastPtr.y;}
+    lastPtr={x:e.clientX,y:e.clientY};
+    const cw=canvas.clientWidth||1,ch=canvas.clientHeight||1;
+    const fv=cabCam&&cabCam.fov?cabCam.fov:85*Math.PI/180;
+    const fh=2*Math.atan(Math.tan(fv/2)*(cw/ch));
+    headYaw-=mx*(fh/cw);
+    if(headYaw>Math.PI)headYaw-=Math.PI*2;if(headYaw<-Math.PI)headYaw+=Math.PI*2;
+    headPitch+=my*(fv/ch);
+    headPitch=Math.max(-0.349,Math.min(0.349,headPitch));
+  }
+});
+function driverPoint(localOff){
+  const cs=Math.cos(heading),sn=Math.sin(heading);
+  return new BABYLON.Vector3(
+    car.position.x+localOff.x*cs+localOff.z*sn,
+    car.position.y+localOff.y,
+    car.position.z-localOff.x*sn+localOff.z*cs);
+}
+
+let pickMode=false;
+const keys={forward:false,back:false,left:false,right:false,brake:false};
+const keyMap={KeyW:'forward',ArrowUp:'forward',KeyS:'back',ArrowDown:'back',
+  KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right',Space:'brake'};
+
+
+addEventListener('keydown',e=>{
+  // Пропускаем, если фокус в input
+  if(e.target.tagName==='INPUT')return;
+  
+  const a=keyMap[e.code];
+  if(a!==undefined){keys[a]=true;if(e.code.startsWith('Arrow')||e.code==='Space')e.preventDefault();}
+  
+  if(e.code==='KeyV')setCabMode(!cabMode);
+  else if(e.code==='KeyF'){camFollow=!camFollow;syncCamFollowBtn();}
+  else if(e.code==='KeyP'){pickMode=!pickMode;
+    const h=document.getElementById('hintline');
+    if(h)h.textContent=pickMode?'РЕЖИМ ВЫБОРА: кликни по нужной секции фары':'Клик по площадке — поставить конус (шаг 0,25 м)';}
+  else if(e.code==='KeyQ'){blinkerLeft=!blinkerLeft;if(blinkerLeft)blinkerRight=false;}
+  else if(e.code==='KeyE'){blinkerRight=!blinkerRight;if(blinkerRight)blinkerLeft=false;}
+  // Зеркала: [ и ] для левого (горизонт), ; и / для правого (горизонт)
+  // Для вертикали используем Shift + те же клавиши
+  else if(e.code==='BracketLeft'){
+    const axis=e.shiftKey?'v':'h';
+    adjustMirror('left',axis,-2);
+    e.preventDefault();
+  }
+  else if(e.code==='BracketRight'){
+    const axis=e.shiftKey?'v':'h';
+    adjustMirror('left',axis,2);
+    e.preventDefault();
+  }
+  else if(e.code==='Semicolon'){
+    const axis=e.shiftKey?'v':'h';
+    adjustMirror('right',axis,-2);
+    e.preventDefault();
+  }
+  else if(e.code==='Slash'&&!e.shiftKey){
+    const axis=e.shiftKey?'v':'h';
+    adjustMirror('right',axis,2);
+    e.preventDefault();
+  }
+  else if(e.code==='Quote'){resetMirrorAngles();e.preventDefault();}
+  else if(e.code==='KeyR'&&!e.ctrlKey&&!e.metaKey){resetMirrorAngles();e.preventDefault();}
+});
+addEventListener('keyup',e=>{const a=keyMap[e.code];if(a!==undefined)keys[a]=false;});
+
+let speed=0,heading=0,steerAngle=0;
+const GRAV_G=9.81,GRAV_SCL=0.9,ENG_ACC=3.4,DRAG_K=0.5,BRAKE_A=13,STATIC_HOLD=2.2;
+let engineT=0,carSlopeF=0;
+function accelModel(t,sb,g,b){
+  let a=t*ENG_ACC;
+  a-=DRAG_K*sb;
+  a-=GRAV_G*GRAV_SCL*g;
+  if(b)a-=Math.sign(sb)*BRAKE_A;
+  return a;
+}
+const spdEl=document.getElementById('spd'),strEl=document.getElementById('str');
+function rearAxleOffset(){
+  const zs=spinPivots.map(p=>p.node.position.z).filter(z=>z<0);
+  return zs.length?zs.reduce((a,b)=>a+b,0)/zs.length:-CAR.wheelbase/2;
+}
+function updateCar(dt){
+  let throttle=0,steerInput=0;
+  if(keys.forward)throttle+=1;if(keys.back)throttle-=1;
+  if(keys.left)steerInput-=1;if(keys.right)steerInput+=1;
+  const MAXV=8/3.6;
+  engineT+=(throttle-engineT)*(1-Math.exp(-dt/0.18));
+  if(keys.brake&&Math.abs(speed)<0.06){speed=0;}
+  else if(Math.abs(engineT)<0.02&&Math.abs(speed)<0.06&&Math.abs(GRAV_G*GRAV_SCL*carSlopeF)<STATIC_HOLD){speed=0;}
+  else speed+=accelModel(engineT,speed,carSlopeF,keys.brake)*dt;
+  speed=Math.max(-MAXV,Math.min(MAXV,speed));
+  const touchActive=touchSteerEnabled&&!keys.left&&!keys.right;
+  const target=touchActive?touchSteerAngle:steerInput*CAR.maxSteer;
+  const rate=touchActive?5:0.8;
+  if(steerAngle<target)steerAngle=Math.min(target,steerAngle+rate*dt);
+  else if(steerAngle>target)steerAngle=Math.max(target,steerAngle-rate*dt);
+  if(window.__syncTouchWheel)window.__syncTouchWheel();
+  const s0=Math.sin(heading),c0=Math.cos(heading);
+  heading+=(speed/CAR.wheelbase)*Math.tan(steerAngle)*dt;
+  const s1=Math.sin(heading),c1=Math.cos(heading);
+  const rz=rearAxleOffset();
+  const limX=TERR.w/2-2,limZ=TERR.d/2-2;
+  const px0=car.position.x,pz0=car.position.z;
+  let nx=Math.max(-limX,Math.min(limX,px0+rz*s0+s0*speed*dt-rz*s1));
+  let nz=Math.max(-limZ,Math.min(limZ,pz0+rz*c0+c0*speed*dt-rz*c1));
+  const dxmove=nx-px0,dzmove=nz-pz0;
+  if(typeof carBlocked==='function'&&(dxmove!==0||dzmove!==0)){
+    const hit=(xq,zq)=>carBlocked(xq,zq,car.position.y,dxmove,dzmove,c1,s1);
+    if(hit(nx,nz)){
+      if(!hit(nx,pz0))nz=pz0;
+      else if(!hit(px0,nz))nx=px0;
+      else{nx=px0;nz=pz0;}
+    }
+  }
+  car.position.x=nx;
+  car.position.z=nz;
+  rideTerrain();
+  const roll=speed*dt;
+  spinPivots.forEach(sp=>sp.node.rotation.x+=roll/sp.radius);
+  steerPivots.forEach(s=>s.rotation.y=steerAngle);
+  blinkTimer+=dt;toggleBlink();syncBlinkBtns();
+  const bdbg=document.getElementById('blinkdbg');
+  if(bdbg){
+    const on=(blinkTimer%0.55)<0.30;
+    const gv=m=>m?(m.isVisible?'1':'0'):'-';
+    bdbg.textContent='Q: '+(blinkerLeft?(on?'ОН':'огн'):'ВЫКЛ')
+      +' | E: '+(blinkerRight?(on?'ОН':'огн'):'ВЫКЛ')
+      +' | задG '+gv(leftGlow)+'/'+gv(rightGlow)
+      +' | фара '+gv(leftFGlow)+'/'+gv(rightFGlow)
+      +' | зер '+gv(leftMirr)+'/'+gv(rightMirr)
+      +(blinkerLeft||blinkerRight?(' | мат '+(leftGlow&&leftGlow.material?leftGlow.material.emissiveColor.r.toFixed(2)+','+leftGlow.material.emissiveColor.g.toFixed(2):'-')):'');
+  }
+  if(steeringWheelNode){
+    steeringWheelNode.rotationQuaternion=steeringBaseQuat.multiply(
+      BABYLON.Quaternion.RotationAxis(steeringLocalAxis,-steerAngle/CAR.maxSteer*Math.PI*3));
+  }
+  spdEl.textContent=Math.round(Math.abs(speed)*3.6);
+  const deg=Math.round(steerAngle*180/Math.PI);
+  strEl.textContent=(deg<0?'← ':deg>0?'→ ':'')+Math.abs(deg)+'°';
+}
+const CAR_RAYS=[[-0.7,-1.35],[0.7,-1.35],[-0.7,1.45],[0.7,1.45]]; // [lateral, longitudinal] contact points
+function rideTerrain(){
+  if(!scene||!ground)return;
+  const cs=Math.cos(heading),sn=Math.sin(heading);
+  const hts=[];
+  for(let i=0;i<CAR_RAYS.length;i++){
+    const lo=CAR_RAYS[i][0],lg=CAR_RAYS[i][1];
+    const wx=car.position.x+lo*cs+lg*sn;
+    const wz=car.position.z-lo*sn+lg*cs;
+    const ray=new BABYLON.Ray(new BABYLON.Vector3(wx,car.position.y+2,wz),new BABYLON.Vector3(0,-1,0),6);
+    const pi=scene.pickWithRay(ray,m=>m&&(m===ground||(m.metadata&&m.metadata.stype==='estacada')));
+    hts.push(pi&&pi.hit?pi.pickedPoint.y:0);
+  }
+  const rl=hts[0],rr=hts[1],fl=hts[2],fr=hts[3];
+  car.position.y=(rl+rr+fl+fr)/4;
+  carSlopeF=((fl+fr)-(rl+rr))/(2*2.8);
+  const pitch=Math.atan2((rl+rr-fl-fr)/2,2.8);
+  const roll=Math.atan2((fr+rr-fl-rl)/2,1.4);
+  car.rotationQuaternion=BABYLON.Quaternion.RotationYawPitchRoll(heading,pitch,roll);
+}
+function lerpAngle(a,b,t){let d=(b-a)%(Math.PI*2);if(d>Math.PI)d-=Math.PI*2;if(d<-Math.PI)d+=Math.PI*2;return a+d*t;}
+function updateCamera(){
+  if(!conesEnabled){
+    const t=camera.target;
+    t.x+=(car.position.x-t.x)*0.12;t.y+=((car.position.y+1.2)-t.y)*0.12;t.z+=(car.position.z-t.z)*0.12;
+  }
+  if(camFollow&&!cabMode&&Math.abs(speed)>0.5&&!conesEnabled){const desired=Math.atan2(-Math.cos(heading),-Math.sin(heading));
+    camera.alpha=lerpAngle(camera.alpha,desired,0.06);}}
+
+scene.onBeforeRenderObservable.add(()=>{
+  // 1. СНАЧАЛА обновляем физику и позицию автомобиля (от реального dt)
+  const dt=Math.min(engine.getDeltaTime()/1000,0.1);
+  updateCar(dt);
+  
+  // 2. ИСПРАВЛЕНО: обновляем плоскости зеркал ПОСЛЕ перемещения машины.
+  // Так отражение использует актуальную позицию и не «отстаёт» на 1 кадр.
+  for(let i=0; i<mirrorUpdaters.length; i++){
+    mirrorUpdaters[i]();
+  }
+  
+  // 3. Далее обновляем камеру и проверяем коллизии
+  if(cabMode){
+    const L=10.45,HY=carHeight*0.85,HZ=-0.1,sy=Math.sin(heading+headYaw),cy=Math.cos(heading+headYaw);
+    let eye;
+    if(steeringWheelNode){
+      // позиция головы по центру руля влево-вправо, высоту и глубину не трогаем
+      steeringWheelNode.computeWorldMatrix(true);
+      const wp=steeringWheelNode.getAbsolutePosition();
+      const lat=new BABYLON.Vector3(Math.cos(heading),0,-Math.sin(heading));
+      const localX=BABYLON.Vector3.Dot(wp.subtract(car.position),lat);
+      eye=driverPoint(new BABYLON.Vector3(localX,HY,HZ));
+    }else{
+      const HX=-0.38;
+      eye=driverPoint(new BABYLON.Vector3(HX,HY,HZ));
+    }
+    cabCam.position.copyFrom(eye);
+    cabCam.setTarget(eye.add(new BABYLON.Vector3(L*sy,L*Math.tan(headPitch),L*cy)));
+  }
+  updateCamera();
+  panApply(dt);
+  checkCollisions();
+  if(typeof updateFlights==='function')updateFlights(dt);
+});
+let __lastFrame=0;
+addEventListener('load',()=>engine.runRenderLoop(()=>{
+  const now=performance.now();
+  if(now-__lastFrame<16.6)return;
+  __lastFrame=now;
+  scene.render();
+}));
+addEventListener('resize',()=>engine.resize());
+
+const gearBtn=document.getElementById('gearBtn');
+const settingsWin=document.getElementById('settingsWin');
+const settingsBackdrop=document.getElementById('settingsBackdrop');
+function openSettings(o){
+  settingsWin.classList.toggle('open',o);
+  settingsBackdrop.classList.toggle('open',o);
+}
+gearBtn.addEventListener('click',()=>openSettings(!settingsWin.classList.contains('open')));
+document.getElementById('settingsClose').addEventListener('click',()=>openSettings(false));
+settingsBackdrop.addEventListener('click',()=>openSettings(false));
+
+const decalWin=document.getElementById('decalWin');
+const decalBackdrop=document.getElementById('decalBackdrop');
+function openDecalWin(o){decalWin.classList.toggle('open',o);decalBackdrop.classList.toggle('open',o);}
+document.getElementById('decalBtn').addEventListener('click',()=>{openSettings(false);buildDecalList();openDecalWin(true);});
+document.getElementById('decalClose').addEventListener('click',()=>openDecalWin(false));
+decalBackdrop.addEventListener('click',()=>openDecalWin(false));
+document.getElementById('decalShowAll').addEventListener('click',()=>{decalMeshes.forEach(m=>m.isVisible=true);saveDecalVisibility();buildDecalList();});
+document.getElementById('decalHideAll').addEventListener('click',()=>{decalMeshes.forEach(m=>m.isVisible=false);saveDecalVisibility();buildDecalList();});
+
+function closeAllWindows(){openSettings(false);openMapEdit(false);openDecalWin(false);openMapWin(false);openTypeWin(false);}
+addEventListener('keydown',e=>{if(e.code==='Escape')closeAllWindows();});
+</script>
+<script src="editor.js"></script>
+<script src="mirror.js"></script>
+<script src="drive-control.js"></script>
+
+</body>
+</html>
