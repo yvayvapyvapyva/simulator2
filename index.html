@@ -736,6 +736,7 @@ function rebuildTerritory(w,d){
   buildFenceAll();
   buildGridAxes();
   if(typeof setTerritoryLimits==='function')setTerritoryLimits(TERR.w/2,TERR.d/2);
+  if(typeof freezeStaticMap==='function')freezeStaticMap();
   saveTerritory();
   if(typeof updateMirrorRenderList==='function')updateMirrorRenderList();
 }
@@ -752,6 +753,7 @@ let steeringWheelNode=null,steeringBaseQuat=null,steeringLocalAxis=null,blinkTim
 let leftGlow=null,rightGlow=null,leftZone=null,rightZone=null;
 let leftFGlow=null,rightFGlow=null;
 let leftMirr=null,rightMirr=null;
+let hiddenGlowMesh=null;
 function createPrimitiveCar(){
   const root=new BABYLON.TransformNode('car',scene);
   const paint=new BABYLON.StandardMaterial('paint',scene);paint.diffuseColor=new BABYLON.Color3(0.82,0.84,0.86);paint.specularColor=new BABYLON.Color3(0.5,0.5,0.5);
@@ -928,7 +930,101 @@ function adoptLoadedModel(newMeshes,label,flip,pitchFlip){
   car.position.set(0,0,0);
   collectDecalMeshes(car);
   setupCarExtras(modelRoot);
+  mergeCarGeometry();
   if(cabMode)applyCabMaterials(true);
+}
+
+// ── Слияние геометрии автомобиля: колёса и кузов ────────────────────
+// В GLB Camry 692 меша, и каждый проход рендера (основной + 2 зеркала)
+// перебирал их все. Сливаем статичные части, группируя по материалу:
+// число мешей в сцене падает с сотен до десятков, а draw call'ы — до
+// числа материалов. Всё, чем управляют снаружи (поворотники, фары, декали,
+// стёкла зеркал), и сами пивоты колёс остаются отдельными объектами.
+const CAR_MERGE_SKIP=/mirror/i;
+// Ключ группы: материал + ориентация + набор вершинных атрибутов + видимость.
+// Babylon отказывается сливать меши с разным набором атрибутов (бросает
+// исключение) и с разным sideOrientation, поэтому это обязательные оси
+// группировки, а не оптимизация.
+function mergeGroupKey(m){
+  const g=m.geometry;
+  if(!g||!g.getIndices())return null;
+  if(!g.getVerticesData(BABYLON.VertexBuffer.PositionKind))return null;
+  const sig=(g.getVerticesData(BABYLON.VertexBuffer.NormalKind)?1:0)
+    +(g.getVerticesData(BABYLON.VertexBuffer.UVKind)?1:0)*2
+    +(g.getVerticesData(BABYLON.VertexBuffer.TangentKind)?1:0)*4
+    +(m.useVertexColors?1:0)*8;
+  return (m.material?m.material.uniqueId:'nomat')+'|'+m.sideOrientation+'|'+sig
+    +'|'+(m.isVisible?1:0)+'|'+m.renderingGroupId;
+}
+function mergeInto(meshes,parent,tag){
+  const groups=new Map();
+  meshes.forEach(m=>{
+    if(!m||m.isDisposed()||m.isAnInstance||m.skeleton)return;
+    const k=mergeGroupKey(m);
+    if(k===null)return;
+    if(!groups.has(k))groups.set(k,[]);
+    groups.get(k).push(m);
+  });
+  let done=0;
+  groups.forEach(list=>{
+    if(list.length<2)return;
+    let merged=null;
+    // disposeSource=false: слитые исходники убираем сами, только после успеха,
+    // иначе частично упавшее слияние оставило бы сцену без геометрии.
+    try{merged=BABYLON.Mesh.MergeMeshes(list,false,true,undefined,false,false);}catch(e){merged=null;}
+    if(!merged)return;
+    merged.material=list[0].material;
+    merged.isPickable=false;
+    merged.isVisible=list[0].isVisible;
+    merged.receiveShadows=list.some(m=>m.receiveShadows);
+    merged.name=tag+'_'+(list[0].material?list[0].material.name:'nomat');
+    // MergeMeshes возвращает меш без трансформа (вершины в мировых координатах),
+    // поэтому setParent переносит его в локальные координаты родителя, сохраняя
+    // мировое положение геометрии — так же, как это уже сделано для колёс выше.
+    merged.setParent(parent,true);
+    list.forEach(m=>{
+      try{shadowGen.removeShadowCaster(m);}catch(e){}
+      try{m.dispose();}catch(e){}
+    });
+    shadowGen.addShadowCaster(merged);
+    done++;
+  });
+  return done;
+}
+function isUnderNode(m,node){
+  if(!node)return false;
+  let p=m.parent;
+  while(p){if(p===node)return true;p=p.parent;}
+  return false;
+}
+function mergeCarGeometry(){
+  if(!car)return 0;
+  const pivots=[];
+  steerPivots.forEach(s=>{if(s)pivots.push(s);});
+  spinPivots.forEach(s=>{if(s&&s.node)pivots.push(s.node);});
+  if(steeringWheelNode)pivots.push(steeringWheelNode);
+  // меши, которыми управляет код — их сливать нельзя
+  const keep=new Set();
+  const add=m=>{if(m&&!m.isDisposed())keep.add(m);};
+  decalMeshes.forEach(add);
+  [leftGlow,rightGlow,leftFGlow,rightFGlow,leftMirr,rightMirr,hiddenGlowMesh].forEach(add);
+  let n=0;
+  // 1) колёса и руль: только прямые потомки пивота, иначе у переднего колеса
+  //    (spin внутри steer) слились бы все части в steer и колесо перестало бы крутиться
+  pivots.forEach((pv,i)=>{
+    if(!pv||pv.isDisposed())return;
+    n+=mergeInto(pv.getChildMeshes(true),pv,'wheelPart'+i);
+  });
+  // 2) кузов: всё, что не под пивотом и не управляется из кода
+  const body=car.getChildMeshes().filter(m=>{
+    if(keep.has(m))return false;
+    if(CAR_MERGE_SKIP.test(m.name))return false;
+    for(const pv of pivots)if(isUnderNode(m,pv))return false;
+    return true;
+  });
+  n+=mergeInto(body,car,'carBody');
+  if(n)console.log('car merge: слито групп',n,'| мешей в сцене',scene.meshes.length);
+  return n;
 }
 
 function clipHalf(mesh,dir,label,band){
@@ -1070,10 +1166,12 @@ function setupCarExtras(modelRoot){
     steeringLocalAxis=BABYLON.Vector3.TransformNormal(wAxis,inv).normalize();
   }else steeringLocalAxis=null;
   const glowM=parts.find(m=>/rear_indicator/i.test(m.name)&&/_glow/i.test(m.name));
+  hiddenGlowMesh=null;
   if(glowM){
     leftGlow=clipHalf(glowM,-1,'_tL');rightGlow=clipHalf(glowM,1,'_tR');
     if(leftGlow&&rightGlow){
       glowM.isVisible=false;
+      hiddenGlowMesh=glowM;
       const gmat=makeBlinkMat('rearBlinkY'+glowM.name);
       leftGlow.material=gmat;rightGlow.material=gmat;
     }

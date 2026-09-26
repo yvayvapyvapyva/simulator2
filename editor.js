@@ -335,6 +335,7 @@ function finishLine(){
   hideLinePreview();
   syncFinishBtn();
   saveDraw(editType);
+  freezeStaticMap();
   if(typeof updateMirrorRenderList==='function')updateMirrorRenderList();
 }
 function saveDraw(type){try{localStorage.setItem(LINE_KEY[type],JSON.stringify(drawStore[type].polys));}catch(e){}}
@@ -382,6 +383,33 @@ function clearDraw(){
   if(typeof updateMirrorRenderList==='function')updateMirrorRenderList();
 }
 if(finishLineBtn)finishLineBtn.addEventListener('click',finishLine);
+
+// ── Заморозка мировых матриц статичной геометрии карты ────────────
+// Асфальт, городская земля, бордюры, забор, разметка, эстакада, сетка и оси
+// никогда не двигаются, поэтому их world-матрицы не нужно пересчитывать
+// каждый кадр. Конусы (в том числе сбитые), машина и превью исключены —
+// они движутся, и заморозка сломала бы их.
+// Вызывается после каждого изменения состава карты.
+function isStaticMapMesh(m){
+  const n=m&&m.name;
+  if(!n)return false;
+  const md=m.metadata;
+  if(md&&md.isCone)return false;
+  if(n==='ground'||n==='cityGround'||n==='grid'||n==='axes')return true;
+  if(/^curb\d+$/.test(n))return true;
+  if(/^(fPost|fRail)/.test(n))return true;
+  if(md&&md.isLine)return true;
+  return false;
+}
+function freezeStaticMap(){
+  let n=0;
+  for(const m of scene.meshes){
+    if(m.isDisposed()||m.isWorldMatrixFrozen)continue;
+    if(!isStaticMapMesh(m))continue;
+    m.freezeWorldMatrix();n++;
+  }
+  return n;
+}
 
 const preview=BABYLON.MeshBuilder.CreateTorus('preview',{diameter:0.4,thickness:0.04,tessellation:28},scene);
 const prevMat=new BABYLON.StandardMaterial('pm',scene);
@@ -645,6 +673,7 @@ function applyMapJson(data){
   updateCount();
   updateCounts();
   DRAW_TYPES.forEach(saveDraw);
+  freezeStaticMap();
   if(typeof updateMirrorRenderList==='function')updateMirrorRenderList();
 }
 function loadMapFile(file){
@@ -858,3 +887,4 @@ loadDraw('lines');
 loadDraw('curb');
 loadDraw('fence');
 loadDraw('estacada');
+freezeStaticMap();
