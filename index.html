@@ -1477,11 +1477,13 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{const a=keyMap[e.code];if(a!==undefined)keys[a]=false;});
 
 let speed=0,heading=0,steerAngle=0;
-const GRAV_G=9.81,GRAV_SCL=0.9,ENG_ACC=3.4,DRAG_K=0.5,BRAKE_A=13,STATIC_HOLD=2.2;
+const GRAV_G=9.81,GRAV_SCL=0.9,ENG_ACC=1.97,DRAG_Q=0.03,ROLL_K=0.075,ENG_BRK=4.5,BRAKE_A=13,STATIC_HOLD=2.2;
 let engineT=0,carSlopeF=0;
 function accelModel(t,sb,g,b){
   let a=t*ENG_ACC;
-  a-=DRAG_K*sb;
+  a-=DRAG_Q*sb*Math.abs(sb);
+  a-=ROLL_K*sb;
+  if(Math.abs(t)<0.05)a-=Math.sign(sb)*ENG_BRK;
   a-=GRAV_G*GRAV_SCL*g;
   if(b)a-=Math.sign(sb)*BRAKE_A;
   return a;
@@ -1495,12 +1497,13 @@ function updateCar(dt){
   let throttle=0,steerInput=0;
   if(keys.forward)throttle+=1;if(keys.back)throttle-=1;
   if(keys.left)steerInput-=1;if(keys.right)steerInput+=1;
-  const MAXV=8/3.6;
   engineT+=(throttle-engineT)*(1-Math.exp(-dt/0.18));
   if(keys.brake&&Math.abs(speed)<0.06){speed=0;}
   else if(Math.abs(engineT)<0.02&&Math.abs(speed)<0.06&&Math.abs(GRAV_G*GRAV_SCL*carSlopeF)<STATIC_HOLD){speed=0;}
-  else speed+=accelModel(engineT,speed,carSlopeF,keys.brake)*dt;
-  speed=Math.max(-MAXV,Math.min(MAXV,speed));
+  else{
+    const ns=speed+accelModel(engineT,speed,carSlopeF,keys.brake)*dt;
+    speed=(speed!==0&&ns*speed<0)?0:ns;
+  }
   const touchActive=touchSteerEnabled&&!keys.left&&!keys.right;
   const target=touchActive?touchSteerAngle:steerInput*CAR.maxSteer;
   const rate=touchActive?5:0.8;
